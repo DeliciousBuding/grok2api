@@ -1,6 +1,6 @@
-# grok2api-go
+# grok2api
 
-将 Grok (x.ai) 转换为 OpenAI / Anthropic 兼容的 API 网关。Go 语言重写，单文件部署，无外部依赖。
+将 Grok (x.ai) 转换为 OpenAI / Anthropic 兼容的 API 网关。
 
 ## 功能特性
 
