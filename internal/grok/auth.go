@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // r is the math/rand source for random birth-date generation. Not security-

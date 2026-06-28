@@ -3,14 +3,14 @@ package account
 import (
 	"strconv"
 
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // Policy governs the state machine transitions.
 type Policy struct {
-	FailThreshold     int // consecutive failures -> COOLING (advisory; cooldown_until drives actual transition)
-	ForbiddenStrikes  int // 403 count -> DISABLED
-	DefaultCoolingMs   int64
+	FailThreshold    int // consecutive failures -> COOLING (advisory; cooldown_until drives actual transition)
+	ForbiddenStrikes int // 403 count -> DISABLED
+	DefaultCoolingMs int64
 }
 
 var DefaultPolicy = Policy{
@@ -21,15 +21,15 @@ var DefaultPolicy = Policy{
 
 // Feedback describes the outcome of one upstream request applied to a record.
 type Feedback struct {
-	Kind          FeedbackKind
-	ModeID        int
-	At            int64
-	StatusCode    int
-	Reason        string
-	QuotaWindow   *QuotaWindow
-	RetryAfterMs  *int64
+	Kind           FeedbackKind
+	ModeID         int
+	At             int64
+	StatusCode     int
+	Reason         string
+	QuotaWindow    *QuotaWindow
+	RetryAfterMs   *int64
 	ConfirmExpired bool
-	ApplyUsage    bool
+	ApplyUsage     bool
 }
 
 // FeedbackFromStatus builds a Feedback from an HTTP status (apply_usage=false).

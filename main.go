@@ -1,4 +1,4 @@
-// Command grok2api-go is the OpenAI/Anthropic-compatible API gateway for Grok.
+// Command grok2api is the OpenAI/Anthropic-compatible API gateway for Grok.
 //
 // Lifecycle mirrors the upstream Python project:
 //  1. Early logging setup (env-driven, before config).
@@ -30,13 +30,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/api"
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/grok"
-	"github.com/jiujiu532/grok2api-go/internal/logger"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
-	"github.com/jiujiu532/grok2api-go/internal/storage"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/api"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/grok"
+	"github.com/aurora-develop/grok2api/internal/logger"
+	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/storage"
 )
 
 // Project version (overridden at build time via -ldflags).
@@ -53,7 +53,7 @@ func main() {
 	}
 	logger.Setup(logLevel, fileLogging, logDir, 7)
 
-	logger.Infof("application startup: service=grok2api-go version=%s platform=%s", projectVersion, runtime.GOOS)
+	logger.Infof("application startup: service=grok2api version=%s platform=%s", projectVersion, runtime.GOOS)
 
 	// 2. Load configuration.
 	defaultsPath := defaultsConfigPath()
@@ -147,7 +147,6 @@ func main() {
 			}()
 		}
 	}
-
 
 	// 10c. Console-quota reset loop.
 	wg.Add(1)

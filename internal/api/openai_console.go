@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/grok"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/grok"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // runConsoleChatWithRetry handles retry + account selection for console chat.
@@ -318,7 +318,7 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 
 	itemID := "msg_" + uuid.NewString()
 	outItem := map[string]any{
-		"type": "response.output_item.added",
+		"type":         "response.output_item.added",
 		"output_index": 0,
 		"item": map[string]any{
 			"id": itemID, "type": "message", "role": "assistant",
@@ -329,7 +329,7 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 	sw.writeEventJSON("response.content_part.added", map[string]any{
 		"type": "response.content_part.added", "item_id": itemID, "output_index": 0,
 		"content_index": 0,
-		"part": map[string]any{"type": "output_text", "text": "", "annotations": []any{}},
+		"part":          map[string]any{"type": "output_text", "text": "", "annotations": []any{}},
 	})
 	if text != "" {
 		sw.writeEventJSON("response.output_text.delta", map[string]any{
@@ -344,14 +344,14 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 	sw.writeEventJSON("response.content_part.done", map[string]any{
 		"type": "response.content_part.done", "item_id": itemID, "output_index": 0,
 		"content_index": 0,
-		"part": map[string]any{"type": "output_text", "text": text, "annotations": []any{}},
+		"part":          map[string]any{"type": "output_text", "text": text, "annotations": []any{}},
 	})
 	sw.writeEventJSON("response.output_item.done", map[string]any{
 		"type": "response.output_item.done", "output_index": 0,
 		"item": map[string]any{
 			"id": itemID, "type": "message", "role": "assistant",
 			"content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}},
-			"status": "completed",
+			"status":  "completed",
 		},
 	})
 	sw.writeEventJSON("response.completed", map[string]any{
@@ -362,7 +362,7 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 			"output": []any{map[string]any{
 				"id": itemID, "type": "message", "role": "assistant",
 				"content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}},
-				"status": "completed",
+				"status":  "completed",
 			}},
 			"usage": map[string]any{"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
 		},
@@ -462,7 +462,7 @@ func (s *Server) handleResponsesNonStream(c *gin.Context, req *chatCompletionReq
 		"output": []any{map[string]any{
 			"id": itemID, "type": "message", "role": "assistant",
 			"content": []any{map[string]any{"type": "output_text", "text": text, "annotations": []any{}}},
-			"status": "completed",
+			"status":  "completed",
 		}},
 		"usage": map[string]any{"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
 	}

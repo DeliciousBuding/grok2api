@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // ConsoleModels maps the public model name → the console.x.ai model field.
@@ -12,8 +12,8 @@ import (
 var ConsoleModels = map[string]string{
 	"grok-4.3-console":                     "grok-4.3",
 	"grok-4.3-low":                         "grok-4.3",
-	"grok-4.3-medium":                     "grok-4.3",
-	"grok-4.3-high":                       "grok-4.3",
+	"grok-4.3-medium":                      "grok-4.3",
+	"grok-4.3-high":                        "grok-4.3",
 	"grok-4.20-0309-reasoning-console":     "grok-4.20-0309-reasoning",
 	"grok-4.20-0309-console":               "grok-4.20-0309",
 	"grok-4.20-0309-non-reasoning-console": "grok-4.20-0309-non-reasoning",
@@ -33,10 +33,10 @@ var modelsWithReasoningField = map[string]struct{}{
 
 // Model name suffix → fixed effort value.
 var modelFixedEffort = map[string]string{
-	"grok-4.3-low":               "low",
-	"grok-4.3-medium":            "medium",
-	"grok-4.3-high":              "high",
-	"grok-4.20-multi-agent-low":  "low",
+	"grok-4.3-low":                 "low",
+	"grok-4.3-medium":              "medium",
+	"grok-4.3-high":                "high",
+	"grok-4.20-multi-agent-low":    "low",
 	"grok-4.20-multi-agent-medium": "medium",
 	"grok-4.20-multi-agent-high":   "high",
 	"grok-4.20-multi-agent-xhigh":  "xhigh",
@@ -45,17 +45,17 @@ var modelFixedEffort = map[string]string{
 // Models with custom max_output_tokens (default is 1_000_000).
 var modelMaxOutputTokens = map[string]int{
 	"grok-4.20-multi-agent-0309": 2_000_000,
-	"grok-build-0.1":              256_000,
+	"grok-build-0.1":             256_000,
 }
 
 // Models supporting web_search / x_search tools.
 var modelsWithSearchTools = map[string]struct{}{
-	"grok-4.20-multi-agent-0309":  {},
-	"grok-4.20-0309":              {},
-	"grok-4.20-0309-reasoning":    {},
+	"grok-4.20-multi-agent-0309":   {},
+	"grok-4.20-0309":               {},
+	"grok-4.20-0309-reasoning":     {},
 	"grok-4.20-0309-non-reasoning": {},
-	"grok-4.3":                    {},
-	"grok-build-0.1":              {},
+	"grok-4.3":                     {},
+	"grok-build-0.1":               {},
 }
 
 // effortMap maps OpenAI reasoning_effort → console API effort.
@@ -150,14 +150,14 @@ func BuildConsolePayload(messages []map[string]any, model string, temperature, t
 	}
 
 	payload := map[string]any{
-		"model":              consoleModel,
-		"input":              inputItems,
-		"max_output_tokens":  maxTokens,
-		"temperature":        temperature,
-		"top_p":              topP,
-		"store":              false,
-		"include":            []string{"reasoning.encrypted_content"},
-		"stream":             stream,
+		"model":             consoleModel,
+		"input":             inputItems,
+		"max_output_tokens": maxTokens,
+		"temperature":       temperature,
+		"top_p":             topP,
+		"store":             false,
+		"include":           []string{"reasoning.encrypted_content"},
+		"stream":            stream,
 	}
 	if _, ok := modelsWithReasoningField[consoleModel]; ok {
 		payload["reasoning"] = map[string]any{"effort": effort}

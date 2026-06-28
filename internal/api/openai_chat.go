@@ -13,27 +13,27 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/grok"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/grok"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // chatCompletionRequest is the OpenAI-compatible chat request body.
 type chatCompletionRequest struct {
-	Model            string           `json:"model"`
-	Messages         []map[string]any `json:"messages"`
-	Stream           *bool            `json:"stream,omitempty"`
-	ReasoningEffort  *string          `json:"reasoning_effort,omitempty"`
-	Temperature      *float64         `json:"temperature,omitempty"`
-	TopP             *float64         `json:"top_p,omitempty"`
-	ImageConfig      *imageConfig     `json:"image_config,omitempty"`
-	VideoConfig      *videoConfig     `json:"video_config,omitempty"`
-	Tools            []map[string]any `json:"tools,omitempty"`
-	ToolChoice       any              `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool           `json:"parallel_tool_calls,omitempty"`
-	MaxTokens        *int             `json:"max_tokens,omitempty"`
+	Model             string           `json:"model"`
+	Messages          []map[string]any `json:"messages"`
+	Stream            *bool            `json:"stream,omitempty"`
+	ReasoningEffort   *string          `json:"reasoning_effort,omitempty"`
+	Temperature       *float64         `json:"temperature,omitempty"`
+	TopP              *float64         `json:"top_p,omitempty"`
+	ImageConfig       *imageConfig     `json:"image_config,omitempty"`
+	VideoConfig       *videoConfig     `json:"video_config,omitempty"`
+	Tools             []map[string]any `json:"tools,omitempty"`
+	ToolChoice        any              `json:"tool_choice,omitempty"`
+	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
+	MaxTokens         *int             `json:"max_tokens,omitempty"`
 }
 
 type imageConfig struct {

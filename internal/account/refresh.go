@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/logger"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/logger"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // errInvalidCredentials is a sentinel returned by refreshOne when the upstream
@@ -25,10 +25,10 @@ func (e *errInvalidCredentials) Unwrap() error { return e.Err }
 
 // ModeQuota is a single mode's live rate-limit window from the upstream API.
 type ModeQuota struct {
-	Remaining    int
-	Total        int
-	WindowSec    int
-	ResetAtMs    *int64
+	Remaining int
+	Total     int
+	WindowSec int
+	ResetAtMs *int64
 }
 
 // UsageFetcher fetches live quota windows for a token/pool. Implemented by

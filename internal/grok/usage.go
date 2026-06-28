@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // modeNames maps modeID → the request modelName for /rest/rate-limits.
@@ -30,11 +30,11 @@ var defaultWindowSecs = map[int]int{
 
 // RateLimitsResponse represents the upstream rate-limits payload shape.
 type RateLimitsResponse struct {
-	WindowSizeSeconds    int   `json:"windowSizeSeconds"`
-	RemainingQueries     int   `json:"remainingQueries"`
-	TotalQueries         int   `json:"totalQueries"`
-	LowEffortRateLimits  *any  `json:"lowEffortRateLimits"`
-	HighEffortRateLimits *any  `json:"highEffortRateLimits"`
+	WindowSizeSeconds    int  `json:"windowSizeSeconds"`
+	RemainingQueries     int  `json:"remainingQueries"`
+	TotalQueries         int  `json:"totalQueries"`
+	LowEffortRateLimits  *any `json:"lowEffortRateLimits"`
+	HighEffortRateLimits *any `json:"highEffortRateLimits"`
 }
 
 // ParseRateLimits converts the flat rate-limits body to a ModeQuota.
@@ -58,7 +58,7 @@ func ParseRateLimits(body map[string]any, defaultWindowSecs int) *account.ModeQu
 	resetAt := syncedAt + int64(window)*1000
 	return &account.ModeQuota{
 		Remaining: int(remaining),
-		Total:    total,
+		Total:     total,
 		WindowSec: window,
 		ResetAtMs: &resetAt,
 	}

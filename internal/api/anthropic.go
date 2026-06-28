@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // handleMessages serves the Anthropic-compatible /v1/messages endpoint.
@@ -256,7 +256,7 @@ func (s *Server) handleAnthropicStream(c *gin.Context, req *chatCompletionReques
 	})
 	// 5. message_delta.
 	sw.writeEventJSON("message_delta", map[string]any{
-		"type": "message_delta",
+		"type":  "message_delta",
 		"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
 		"usage": map[string]any{"output_tokens": 0},
 	})

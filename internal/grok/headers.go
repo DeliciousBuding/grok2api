@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // resolveProxyProfile returns the effective user-agent and cf_clearance.
@@ -150,10 +150,10 @@ func clientHints(_ string, ua string) map[string]string {
 
 	// Build only the hints that are non-empty — order matches Python build order.
 	hints := map[string]string{
-		"Sec-Ch-Ua":              fmt.Sprintf(`"Google Chrome";v="%s", "Chromium";v="%s", "Not/A)Brand";v="99"`, ver, ver),
-		"Sec-Ch-Ua-Mobile":       mobile,
-		"Sec-Ch-Ua-Model":        `""`,
-		"Sec-Ch-Ua-Full-Version": fmt.Sprintf(`"%s.0.0.0"`, ver),
+		"Sec-Ch-Ua":                  fmt.Sprintf(`"Google Chrome";v="%s", "Chromium";v="%s", "Not/A)Brand";v="99"`, ver, ver),
+		"Sec-Ch-Ua-Mobile":           mobile,
+		"Sec-Ch-Ua-Model":            `""`,
+		"Sec-Ch-Ua-Full-Version":     fmt.Sprintf(`"%s.0.0.0"`, ver),
 		"Sec-Ch-Ua-Platform-Version": `"13.0.0"`,
 	}
 	if plat != "" {

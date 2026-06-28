@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // Slot is the in-memory runtime view of an account used for fast selection.
@@ -43,13 +43,13 @@ const (
 
 // Directory is the in-memory account runtime table with selection/release/feedback.
 type Directory struct {
-	mu        sync.Mutex
-	slots     map[string]*Slot
-	byMode    map[modeKey]map[string]struct{}
-	revision  int
-	repo      Repository
-	strategy  Strategy
-	leaseSeq  int64
+	mu          sync.Mutex
+	slots       map[string]*Slot
+	byMode      map[modeKey]map[string]struct{}
+	revision    int
+	repo        Repository
+	strategy    Strategy
+	leaseSeq    int64
 	maxInflight int
 }
 
@@ -61,10 +61,10 @@ type modeKey struct {
 // NewDirectory creates a directory backed by the given repository.
 func NewDirectory(repo Repository) *Directory {
 	return &Directory{
-		slots:      map[string]*Slot{},
-		byMode:     map[modeKey]map[string]struct{}{},
-		repo:       repo,
-		strategy:   StrategyQuota,
+		slots:       map[string]*Slot{},
+		byMode:      map[modeKey]map[string]struct{}{},
+		repo:        repo,
+		strategy:    StrategyQuota,
 		maxInflight: 8,
 	}
 }
@@ -478,14 +478,14 @@ func (d *Directory) Revision() int {
 
 const (
 	quotaMaxInflight  = 12
-	randomMaxFails     = 5
-	successStep        = 0.12
-	authFactor         = 0.55
-	forbiddenFactor    = 0.25
-	rateLimitFactor    = 0.45
-	serverErrorFactor  = 0.75
-	minHealth          = 0.05
-	consoleCoolingSec  = 14400
+	randomMaxFails    = 5
+	successStep       = 0.12
+	authFactor        = 0.55
+	forbiddenFactor   = 0.25
+	rateLimitFactor   = 0.45
+	serverErrorFactor = 0.75
+	minHealth         = 0.05
+	consoleCoolingSec = 14400
 )
 
 func ptrVal(p *int64) int64 {

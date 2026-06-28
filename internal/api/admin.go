@@ -15,12 +15,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/grok"
-	"github.com/jiujiu532/grok2api-go/internal/logger"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
-	"github.com/jiujiu532/grok2api-go/internal/storage"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/grok"
+	"github.com/aurora-develop/grok2api/internal/logger"
+	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/storage"
 )
 
 // --- System endpoints ---
@@ -1032,11 +1032,11 @@ func (s *Server) handleCacheList(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"status":   "success",
-		"total":    total,
-		"page":     page,
+		"status":    "success",
+		"total":     total,
+		"page":      page,
 		"page_size": pageSize,
-		"items":    out,
+		"items":     out,
 	})
 }
 

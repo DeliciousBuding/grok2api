@@ -1,6 +1,6 @@
 # API Reference
 
-grok2api-go exposes an OpenAI-compatible and Anthropic-compatible REST API. Default listen address: `http://0.0.0.0:8000`.
+grok2api exposes an OpenAI-compatible and Anthropic-compatible REST API. Default listen address: `http://0.0.0.0:8000`.
 
 ## Authentication
 

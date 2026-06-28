@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiujiu532/grok2api-go/internal/account"
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // selectionMaxRetries mirrors _account_selection.selection_max_retries().

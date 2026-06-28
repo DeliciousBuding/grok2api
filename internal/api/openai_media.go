@@ -18,10 +18,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/jiujiu532/grok2api-go/internal/grok"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
-	"github.com/jiujiu532/grok2api-go/internal/storage"
+	"github.com/aurora-develop/grok2api/internal/grok"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/storage"
 )
 
 // fileIDRE matches a valid local media file ID (UUID-style hex with dashes).
@@ -293,18 +293,18 @@ func fetchImageBase64(url string) (string, error) {
 // --- Video jobs (async) ---
 
 type videoJob struct {
-	ID          string    `json:"id"`
-	Object      string    `json:"object"`
-	CreatedAt   int64     `json:"created_at"`
-	Status      string    `json:"status"`
-	Model       string    `json:"model"`
-	Progress    int       `json:"progress"`
-	Prompt      string    `json:"prompt"`
-	Seconds     int       `json:"seconds"`
-	Size        string    `json:"size"`
-	Quality     string    `json:"quality"`
-	VideoURL    string    `json:"video_url,omitempty"`
-	CompletedAt *int64    `json:"completed_at,omitempty"`
+	ID          string `json:"id"`
+	Object      string `json:"object"`
+	CreatedAt   int64  `json:"created_at"`
+	Status      string `json:"status"`
+	Model       string `json:"model"`
+	Progress    int    `json:"progress"`
+	Prompt      string `json:"prompt"`
+	Seconds     int    `json:"seconds"`
+	Size        string `json:"size"`
+	Quality     string `json:"quality"`
+	VideoURL    string `json:"video_url,omitempty"`
+	CompletedAt *int64 `json:"completed_at,omitempty"`
 	Error       *struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`

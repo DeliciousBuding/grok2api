@@ -6,7 +6,7 @@ package account
 import (
 	"sort"
 
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // Status is the persistent lifecycle status of an account.
@@ -82,11 +82,11 @@ const (
 	FbSuccess      FeedbackKind = "success"
 	FbUnauthorized FeedbackKind = "unauthorized"
 	FbForbidden    FeedbackKind = "forbidden"
-	FbRateLimited   FeedbackKind = "rate_limited"
-	FbServerError   FeedbackKind = "server_error"
-	FbDisable       FeedbackKind = "disable"
-	FbDelete        FeedbackKind = "delete"
-	FbRestore       FeedbackKind = "restore"
+	FbRateLimited  FeedbackKind = "rate_limited"
+	FbServerError  FeedbackKind = "server_error"
+	FbDisable      FeedbackKind = "disable"
+	FbDelete       FeedbackKind = "delete"
+	FbRestore      FeedbackKind = "restore"
 )
 
 // FeedbackKindFromStatus maps an HTTP status code to a feedback kind.
@@ -117,11 +117,11 @@ const (
 
 // QuotaWindow is the per-mode rate-limit window.
 type QuotaWindow struct {
-	Remaining     int        `json:"remaining"`
-	Total         int        `json:"total"`
-	WindowSeconds int        `json:"window_seconds"`
-	ResetAt       *int64     `json:"reset_at"`
-	SyncedAt      *int64     `json:"synced_at"`
+	Remaining     int         `json:"remaining"`
+	Total         int         `json:"total"`
+	WindowSeconds int         `json:"window_seconds"`
+	ResetAt       *int64      `json:"reset_at"`
+	SyncedAt      *int64      `json:"synced_at"`
 	Source        QuotaSource `json:"source"`
 }
 

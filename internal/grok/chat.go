@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/model"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/model"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // FrameEventKind enumerates the event kinds emitted by StreamAdapter.
@@ -57,8 +57,8 @@ func BuildChatPayload(message string, modeID model.ModeId, fileAttachments []str
 	}
 
 	payload := map[string]any{
-		"collectionIds":                 []any{},
-		"connectors":                    []any{},
+		"collectionIds": []any{},
+		"connectors":    []any{},
 		"deviceEnvInfo": map[string]any{
 			"darkModeEnabled":  false,
 			"devicePixelRatio": 2,
@@ -68,11 +68,11 @@ func BuildChatPayload(message string, modeID model.ModeId, fileAttachments []str
 			"viewportWidth":    2056,
 		},
 		"disableMemory":               !memory,
-		"disableSearch":                false,
-		"disableSelfHarmShortCircuit":  false,
-		"disableTextFollowUps":         false,
-		"enableImageGeneration":        true,
-		"enableImageStreaming":         true,
+		"disableSearch":               false,
+		"disableSelfHarmShortCircuit": false,
+		"disableTextFollowUps":        false,
+		"enableImageGeneration":       true,
+		"enableImageStreaming":        true,
 		"enableSideBySide":            true,
 		"fileAttachments":             fileAttachments,
 		"forceConcise":                false,

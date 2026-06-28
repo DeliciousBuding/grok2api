@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	tlsclient "github.com/jiujiu532/grok2api-go/internal/tlsclient"
+	tlsclient "github.com/aurora-develop/grok2api/internal/tlsclient"
 
-	"github.com/jiujiu532/grok2api-go/internal/config"
-	"github.com/jiujiu532/grok2api-go/internal/platform"
+	"github.com/aurora-develop/grok2api/internal/config"
+	"github.com/aurora-develop/grok2api/internal/platform"
 )
 
 // Transport is the HTTP client for upstream Grok requests.  It uses
@@ -108,13 +108,13 @@ type reqOpts struct {
 
 type RequestOption func(*reqOpts)
 
-func WithTimeout(d time.Duration) RequestOption     { return func(o *reqOpts) { o.timeout = d } }
-func WithOrigin(v string) RequestOption             { return func(o *reqOpts) { o.origin = v } }
-func WithReferer(v string) RequestOption            { return func(o *reqOpts) { o.referer = v } }
-func WithContentType(v string) RequestOption         { return func(o *reqOpts) { o.contentType = v } }
-func WithConsoleMode() RequestOption                { return func(o *reqOpts) { o.consoleMode = true } }
-func WithExtraHeaders(h http.Header) RequestOption   { return func(o *reqOpts) { o.extraHeaders = h } }
-func WithoutContentType() RequestOption              { return func(o *reqOpts) { o.noContentType = true } }
+func WithTimeout(d time.Duration) RequestOption    { return func(o *reqOpts) { o.timeout = d } }
+func WithOrigin(v string) RequestOption            { return func(o *reqOpts) { o.origin = v } }
+func WithReferer(v string) RequestOption           { return func(o *reqOpts) { o.referer = v } }
+func WithContentType(v string) RequestOption       { return func(o *reqOpts) { o.contentType = v } }
+func WithConsoleMode() RequestOption               { return func(o *reqOpts) { o.consoleMode = true } }
+func WithExtraHeaders(h http.Header) RequestOption { return func(o *reqOpts) { o.extraHeaders = h } }
+func WithoutContentType() RequestOption            { return func(o *reqOpts) { o.noContentType = true } }
 
 func applyOpts(opts []RequestOption) reqOpts {
 	o := reqOpts{
