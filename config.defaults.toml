@@ -2,8 +2,6 @@
 [app]
 # 管理后台密码
 app_key = "grok2api"
-# 应用访问地址（图片/视频链接需要）
-app_url = ""
 # API 调用密钥（留空不鉴权，逗号分隔多个）
 api_key = ""
 
@@ -24,18 +22,8 @@ stream = true
 thinking = true
 # 聊天类 AUTO 模型在 auto 额度耗尽时，是否自动降级到 fast/expert
 auto_chat_mode_fallback = true
-# 是否动态生成 Statsig 指纹
-dynamic_statsig = true
-# 是否允许生成 NSFW 图片
-enable_nsfw = true
-# 是否在响应正文末尾追加 ## Sources 纯文本段落
-show_search_sources = false
 # 全局附加指令
 custom_instruction = ""
-# 图片返回格式：grok_url | local_url | grok_md | local_md | base64
-image_format = "grok_url"
-# 视频返回格式：grok_url | local_url | grok_html | local_html
-video_format = "grok_url"
 
 # ==================== 本地缓存 ====================
 [cache.local]
@@ -46,36 +34,19 @@ video_max_mb = 0
 
 # ==================== 代理配置 ====================
 [proxy.egress]
-# 出口模式：direct | single_proxy | proxy_pool
-mode = "direct"
-# 基础代理 URL（single_proxy 模式必填）
+# 代理 URL
 proxy_url = ""
-# 基础代理池（proxy_pool 模式必填）
-proxy_pool = []
-# 资源代理 URL（未配置则回落到 proxy_url）
-resource_proxy_url = ""
-# 跳过代理 SSL 证书验证
-skip_ssl_verify = false
 
 [proxy.clearance]
-# Cloudflare clearance 模式：none | manual | flaresolverr
-mode = "none"
 # 手动模式：Cloudflare Cookie 字符串
 cf_cookies = ""
 # User-Agent（需与 cf_cookies 匹配）
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
-# tls-client 浏览器指纹（chrome136 等价于 Chrome_146 配置）
-browser = "chrome136"
+
 # x-statsig-id 值（从浏览器抓包获取，留空则自动生成随机值）
 statsig_id = ""
 # grok_device_id（从浏览器抓包获取，留空则自动生成 UUID）
 device_id = ""
-# FlareSolverr 服务地址
-flaresolverr_url = ""
-# 挑战等待超时（秒）
-timeout_sec = 60
-# Clearance 刷新间隔（秒）
-refresh_interval = 3600
 
 # ==================== 重试策略 ====================
 [retry]
@@ -86,42 +57,23 @@ max_retries = 1
 # 触发换账号重试的 HTTP 状态码，英文逗号分隔
 on_codes = "429,401,503"
 
+# ==================== 账号刷新 ====================
 [account.refresh]
 # 总开关：true=配额刷新模式；false=随机选号模式
 enabled = true
 basic_interval_sec = 86400
 super_interval_sec = 7200
 heavy_interval_sec = 7200
-usage_concurrency = 15
-on_demand_min_interval_sec = 300
 
 [account.selection]
 # 单号并发上限
 max_inflight = 8
 
-# ==================== 对话配置 ====================
-[chat]
-timeout = 120
-
-[image]
-timeout = 300
-stream_timeout = 300
-
-[video]
-timeout = 60
-
+# ==================== 超时配置 ====================
 [asset]
 upload_timeout = 60
-download_timeout = 60
 list_timeout = 60
 delete_timeout = 60
 
 [nsfw]
 timeout = 60
-
-[batch]
-nsfw_concurrency = 50
-refresh_concurrency = 50
-asset_upload_concurrency = 10
-asset_list_concurrency = 50
-asset_delete_concurrency = 50

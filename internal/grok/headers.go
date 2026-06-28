@@ -16,13 +16,11 @@ import (
 	"github.com/jiujiu532/grok2api-go/internal/platform"
 )
 
-// resolveProxyProfile returns the effective user-agent, cf_clearance, and
-// browser to impersonate. All values are pulled from config.proxy.clearance.
+// resolveProxyProfile returns the effective user-agent and cf_clearance.
 type proxyProfile struct {
-	UserAgent    string
-	CFCookies    string
-	CFClearance  string
-	BrowserLabel string
+	UserAgent   string
+	CFCookies   string
+	CFClearance string
 }
 
 func resolveProxyProfile() proxyProfile {
@@ -36,12 +34,10 @@ func resolveProxyProfile() proxyProfile {
 	if clearance == "" {
 		clearance = strings.TrimSpace(cfg.GetStr("proxy.clearance.cf_clearance", ""))
 	}
-	browser := strings.TrimSpace(cfg.GetStr("proxy.clearance.browser", "chrome146"))
 	return proxyProfile{
-		UserAgent:    ua,
-		CFCookies:    cookies,
-		CFClearance:  clearance,
-		BrowserLabel: browser,
+		UserAgent:   ua,
+		CFCookies:   cookies,
+		CFClearance: clearance,
 	}
 }
 
@@ -253,7 +249,7 @@ func BuildHTTPHeaders(ssoToken string, contentType, origin, referer string, prof
 	h.Set("x-statsig-id", statsigID())
 	h.Set("x-xai-request-id", uuid.NewString())
 
-	for k, v := range clientHints(profile.BrowserLabel, ua) {
+	for k, v := range clientHints("", ua) {
 		h.Set(k, v)
 	}
 	h.Set("Cookie", BuildSSOCookie(ssoToken, profile))
@@ -289,7 +285,7 @@ func BuildConsoleHeaders(ssoToken string, contentType string, profile proxyProfi
 	h.Set("Sec-Fetch-Site", "same-origin")
 	h.Set("User-Agent", ua)
 	h.Set("x-cluster", "https://us-east-1.api.x.ai")
-	for k, v := range clientHints(profile.BrowserLabel, profile.UserAgent) {
+	for k, v := range clientHints("", profile.UserAgent) {
 		h.Set(k, v)
 	}
 	return h
