@@ -1,6 +1,6 @@
 # grok2api
 
-将 Grok (x.ai) 转换为 OpenAI / Anthropic 兼容的 API 网关。
+将 Grok (x.ai) 转换为 OpenAI / Anthropic 兼容的 API 网关。纯 Go 实现，单二进制部署，多架构 Docker 镜像开箱即用。
 
 ## 功能特性
 
@@ -9,14 +9,18 @@
 - **多账号池管理** — 支持 basic / super / heavy 三级账号池，自动配额跟踪
 - **智能选号** — 配额感知策略（按剩余配额评分）和随机策略，自动故障转移
 - **浏览器指纹伪装** — TLS 指纹、HTTP/2 头序、Chrome 客户端提示，规避上游检测
-- **代理支持** — 直连 / 单代理 / 代理池，支持 SOCKS4/5
-- **Cloudflare 绕过** — 手动 Cookie / FlareSolverr 自动获取
+- **纯 Go 生成反 bot 头** — `x-statsig-id` 等头由内置算法实时生成，无需浏览器或 JS 运行时
+- **代理支持** — 直连 / 单代理，兼容 HTTP/HTTPS/SOCKS4/5
+- **Cloudflare 绕过** — 手动 Cookie 注入，`cf_clearance` 自动提取
 - **本地媒体缓存** — 图片和视频本地缓存，LRU 淘汰
 - **管理后台** — 完整的 Token CRUD、配置热更新、批量操作
 - **热重载配置** — 修改配置文件即时生效，无需重启
 - **多实例部署** — 基于文件锁的 Leader 选举，支持多进程运行
+- **多架构 Docker 镜像** — GHCR 自动构建 amd64 / arm64 / armv7
 
 ## 快速开始
+
+> **Docker 用户**：可直接 `docker pull ghcr.io/aurora-develop/grok2api:latest` 一键启动，无需编译。完整 Docker 指引见文末[部署](#部署)章节；下方流程适用于源码运行。
 
 ### 1. 获取 SSO Token
 
@@ -133,25 +137,25 @@ print(message.content[0].text)
 
 ## 配置反爬绕过（重要）
 
-Grok 有 Cloudflare + 自研反爬机制。要正常调用，需要从浏览器抓取以下值：
+Grok 有 Cloudflare + 自研反爬机制。要正常调用，最关键的是从浏览器抓取 `cf_clearance` Cookie：
 
 1. 打开 [grok.com](https://grok.com)（已登录），F12 → **Network**
 2. 在 Grok 页面随便发一条消息
-3. 找到 `conversations/new` 请求 → **Headers**
-4. 复制以下值到 `data/config.toml`：
+3. 找到 `conversations/new` 请求 → **Headers** → **Cookie**
+4. 复制 Cookie 字符串到 `data/config.toml`：
 
 ```toml
 [proxy.clearance]
-mode = "manual"
-# 从 Request Headers → Cookie 中复制
-cf_cookies = "cf_clearance=完整的cf_clearance值"
-# 从 Request Headers → Cookie 中复制 grok_device_id 的值
-device_id = "e6189f18-6160-4033-9141-3c30817469c3"
-# 从 Request Headers 中复制 x-statsig-id 的值
-statsig_id = "Ww5mfysMHqr1EkqEL6FM5Ad..."
+# 直接粘贴整段 Cookie 头，程序会自动提取 cf_clearance 等字段
+cf_cookies = "cf_clearance=...; sso=...; grok_device_id=...; ..."
+# 抓取 Cookie 时浏览器使用的 User-Agent（必须一致，否则 cf_clearance 失效）
+user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ..."
 ```
 
-> 也可以把浏览器 Cookie 头里所有值都放到 `cf_cookies` 字段，程序会自动提取需要的部分。`device_id` 和 `statsig_id` 不配也行，程序会自动生成随机值。
+> **提示**
+> - `cf_clearance` 有效期通常几小时到一天，过期后需重新抓取，否则会返回 403。
+> - 把整段 Cookie 头都放进 `cf_cookies` 即可，程序会自动提取所需部分。
+> - `x-statsig-id` 等反 bot 头由程序用纯 Go 实时生成，**无需手动配置**；如需强制使用真实值，可设置 `statsig_seed` / `statsig_hex`（见 [配置说明](#配置说明)）。
 
 ## 配置说明
 
@@ -166,7 +170,6 @@ statsig_id = "Ww5mfysMHqr1EkqEL6FM5Ad..."
 ```toml
 [app]
 app_key = "grok2api"           # 管理后台密码
-app_url = ""                    # 应用访问地址（图片/视频链接需要）
 api_key = ""                    # API 密钥（留空不鉴权，逗号分隔多个）
 
 [features]
@@ -176,15 +179,19 @@ temporary = true                # 临时对话（不保存历史）
 auto_chat_mode_fallback = true  # AUTO 模型自动降级到 fast/expert
 
 [proxy.egress]
-mode = "direct"                 # direct | single_proxy | proxy_pool
-proxy_url = ""                  # 单代理地址
+proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SOCKS4/5
 
 [proxy.clearance]
-mode = "none"                   # none | manual | flaresolverr
+cf_cookies = ""                 # 手动模式：浏览器 Cookie 串（含 cf_clearance）
+user_agent = "..."              # 需与抓取 Cookie 时的 UA 一致
+statsig_seed = ""                # 可选：真实 statsig 种子（不配则用内置生成）
+statsig_hex  = ""                # 可选：真实 statsig HEX 指纹
 
 [account.refresh]
 enabled = true                  # true=配额模式；false=随机模式
 ```
+
+> `config.defaults.toml` 内置全部默认值，`data/config.toml` 只需覆盖你想修改的项即可。
 
 ### 环境变量
 
@@ -242,21 +249,52 @@ curl -X POST http://localhost:8000/admin/api/config \
 
 ## 部署
 
-### Docker
+### Docker（推荐）
 
-```dockerfile
-FROM golang:1.25-alpine AS builder
-WORKDIR /app
-COPY . .
-RUN go build -o grok2api .
+镜像已通过 GitHub Actions 自动构建并发布到 GHCR，支持 `linux/amd64`、`linux/arm64`、`linux/arm/v7` 多架构。直接拉取即可使用，无需本地编译。
 
-FROM alpine:latest
-WORKDIR /app
-COPY --from=builder /app/grok2api .
-COPY config.defaults.toml .
-EXPOSE 8000
-CMD ["./grok2api"]
+```bash
+# 拉取最新镜像
+docker pull ghcr.io/aurora-develop/grok2api:latest
+
+# 运行容器（挂载 data 目录以持久化配置与账号数据）
+docker run -d \
+  --name grok2api \
+  -p 8000:8000 \
+  -v $(pwd)/data:/app/data \
+  ghcr.io/aurora-develop/grok2api:latest
 ```
+
+启动后访问 `http://localhost:8000`，管理后台密码默认为 `grok2api`。
+
+> **可选环境变量**：`SERVER_PORT`（覆盖监听端口）、`PROXY_HTTP`（覆盖出站代理）、`TZ`（时区，如 `Asia/Shanghai`）。
+>
+> **指定版本**：`docker pull ghcr.io/aurora-develop/grok2api:v1.0.1`，或用 commit 短哈希 `ghcr.io/aurora-develop/grok2api:<sha>` 锁定具体构建。
+
+#### Docker Compose
+
+```yaml
+services:
+  grok2api:
+    image: ghcr.io/aurora-develop/grok2api:latest
+    container_name: grok2api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+      # - PROXY_HTTP=http://127.0.0.1:7890
+```
+
+```bash
+docker compose up -d
+```
+
+#### 本地自行构建
+
+如需修改源码后自建镜像，可使用仓库自带的 `Dockerfile`：
 
 ```bash
 docker build -t grok2api .
@@ -274,29 +312,36 @@ docker run -p 8000:8000 -v ./data:/app/data grok2api
 A: 登录 [grok.com](https://grok.com)，按 F12 打开开发者工具 → Application → Cookies → 找到 `sso` 字段复制其值。详见上方「获取 SSO Token」章节。
 
 **Q: 为什么调用返回 403 "Request rejected by anti-bot rules"？**
-A: 这是 Grok 的反爬机制。需要配置以下内容：
-1. `proxy.clearance.cf_cookies` — 浏览器的 `cf_clearance` Cookie
-2. `proxy.clearance.device_id` — 浏览器的 `grok_device_id` Cookie（可选，不配自动生成）
-3. `proxy.clearance.statsig_id` — 浏览器的 `x-statsig-id` header 值（可选，不配自动生成随机值）
+A: 这是 Grok 的反爬机制，通常是 `cf_clearance` 缺失或过期。解决方法：
 
-从浏览器 F12 → Network → 找到 grok.com 请求 → 复制 Cookie 和 Request Headers 中的对应值。
+1. 按上方「配置反爬绕过」重新抓取浏览器 Cookie，填入 `proxy.clearance.cf_cookies`
+2. 确保 `proxy.clearance.user_agent` 与抓取时浏览器的 UA 完全一致
+3. 若使用代理，确认代理出口 IP 与浏览器 IP 一致（cf_clearance 绑定 IP）
+
+> `x-statsig-id` 等反 bot 头由程序自动生成，无需手动处理。
 
 **Q: 如何获取 cf_clearance？**
-A: 登录 grok.com，F12 → Network → 刷新页面 → 找到任意 grok.com 请求 → Request Headers → Cookie → 复制 `cf_clearance=...` 的值。有效期通常几小时到一天。
+A: 登录 grok.com，F12 → Network → 刷新页面 → 找到任意 grok.com 请求 → Request Headers → Cookie → 复制 `cf_clearance=...` 的值。有效期通常几小时到一天。最简单的做法是把整段 Cookie 头都粘进 `cf_cookies`。
 
 **Q: 如何使用代理？**
-A: 在 `config.toml` 中设置 `[proxy.egress]`，支持 `single_proxy` 和 `proxy_pool` 模式，兼容 HTTP/HTTPS/SOCKS4/SOCKS5 协议。
+A: 在 `config.toml` 的 `[proxy.egress]` 中设置 `proxy_url`，兼容 HTTP/HTTPS/SOCKS4/SOCKS5 协议；或用环境变量 `PROXY_HTTP` 覆盖。示例：`proxy_url = "socks5://127.0.0.1:1080"`。
 
 **Q: 支持图片输入吗？**
 A: 支持。在 messages 的 content 中使用 `image_url` 类型，支持 URL 和 base64 data URI。
 
 **Q: 多实例怎么部署？**
-A: 直接启动多个进程，自动通过文件锁选举 Leader。Leader 负责配额刷新，所有进程都处理 API 请求。
+A: 直接启动多个进程，自动通过文件锁选举 Leader。Leader 负责配额刷新，所有进程都处理 API 请求。Docker 多实例同理，分别 `docker run` 即可（注意挂载各自的 `data` 目录或共享存储）。
 
 ## 致谢
 
-https://github.com/chenyme/grok2api
-本项目已在 [LINUX DO 社区](https://linux.do) 发布，感谢社区的支持与反馈。
+本项目在以下开源项目的基础上发展而来，特此致谢：
+
+- [chenyme/grok2api](https://github.com/chenyme/grok2api) — 原始 Python 实现，为本项目的协议兼容与账号管理提供了重要参考。
+
+同时感谢 [LINUX DO 社区](https://linux.do) —— 本项目在此发布，感谢社区用户的反馈与帮助。
+
+> 本项目为独立重写的 Go 实现，与上述项目无附属关系，旨在提供更轻量、高性能的部署体验。
+
 ## 许可
 
 MIT License
