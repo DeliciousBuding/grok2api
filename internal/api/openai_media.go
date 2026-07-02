@@ -18,6 +18,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/aurora-develop/grok2api/internal/account"
+	"github.com/aurora-develop/grok2api/internal/config"
 	"github.com/aurora-develop/grok2api/internal/grok"
 	"github.com/aurora-develop/grok2api/internal/model"
 	"github.com/aurora-develop/grok2api/internal/platform"
@@ -103,30 +105,26 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 	if n <= 0 {
 		n = 1
 	}
-	maxN := 10
-	if spec.ModelName == "grok-imagine-image-lite" {
-		maxN = 4
-	}
-	if n > maxN {
-		n = maxN
-	}
 	responseFormat := req.ResponseFormat
 	if responseFormat == "" {
 		responseFormat = "url"
 	}
 
-	messages := []map[string]any{{"role": "user", "content": "Drawing: " + req.Prompt}}
-	chatReq := &chatCompletionRequest{
-		Model:    req.Model,
-		Messages: messages,
+	// WS-based models (grok-imagine-image, grok-imagine-image-pro).
+	if grok.IsWSImageModel(spec.ModelName) {
+		s.handleWSImageGenerations(c, spec, req.Prompt, n, req.Size, responseFormat)
+		return
 	}
-	streamOff := false
-	chatReq.Stream = &streamOff
 
-	imageURLs := s.captureImageURLs(c.Request, chatReq, spec)
-	if len(imageURLs) < n {
-		// Pad with what we have.
+	// Lite model: chat-based generation with concurrent fan-out.
+	maxN := 4
+	if n > maxN {
+		n = maxN
 	}
+
+	prompt := "Drawing: " + req.Prompt
+	imageURLs := s.captureLiteImageBatch(c.Request, spec, prompt, n)
+
 	out := []map[string]any{}
 	for i := 0; i < n && i < len(imageURLs); i++ {
 		url := imageURLs[i]
@@ -143,6 +141,77 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 		"created": time.Now().Unix(),
 		"data":    out,
 	})
+}
+
+// handleWSImageGenerations handles image generation via the WS imagine endpoint.
+func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prompt string, n int, size, responseFormat string) {
+	if n <= 0 {
+		n = 1
+	}
+	maxN := 10
+	if n > maxN {
+		n = maxN
+	}
+
+	aspectRatio := grok.ResolveAspectRatio(size)
+	enableNSFW := config.Global().GetBool("features.enable_nsfw", true)
+	enablePro := grok.IsProImageModel(spec.ModelName)
+
+	apiToken, _ := c.Get("api_token")
+	ssoToken, _ := apiToken.(string)
+
+	// Reserve an account.
+	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+	if lease == nil && ssoToken != "" {
+		lease = &account.Lease{Token: ssoToken, ModeID: int(spec.ModeId)}
+	}
+	if lease == nil {
+		writeAppError(c, platform.RateLimitError("No available accounts"))
+		return
+	}
+	defer s.Directory.Release(lease)
+
+	stream := grok.NewImagineStream(lease.Token)
+	events := stream.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
+
+	type collectedImage struct {
+		url  string
+		blob string
+	}
+	var images []collectedImage
+	for ev := range events {
+		switch ev.Type {
+		case grok.ImagineEventImage:
+			url := ""
+			if ev.URL != "" {
+				url = grok.ImageBaseURL + strings.TrimPrefix(ev.URL, "/")
+			}
+			images = append(images, collectedImage{url: url, blob: ev.Blob})
+		case grok.ImagineEventError:
+			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
+			return
+		}
+	}
+
+	out := []map[string]any{}
+	for i := 0; i < n && i < len(images); i++ {
+		img := images[i]
+		if responseFormat == "b64_json" {
+			if img.blob != "" {
+				out = append(out, map[string]any{"b64_json": img.blob})
+			} else if img.url != "" {
+				b64, err := fetchImageBase64(img.url)
+				if err == nil {
+					out = append(out, map[string]any{"b64_json": b64})
+					continue
+				}
+				out = append(out, map[string]any{"url": img.url})
+			}
+		} else {
+			out = append(out, map[string]any{"url": img.url})
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
 }
 
 // handleImageEdits serves the multipart image-edit endpoint.
@@ -259,6 +328,42 @@ func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, s
 	}
 	text, _ := msg["content"].(string)
 	return extractImageURLsFromMarkdown(text)
+}
+
+// captureLiteImageBatch runs N concurrent chat-based image generation
+// requests and returns all collected image URLs.
+func (s *Server) captureLiteImageBatch(r *http.Request, spec *model.Spec, prompt string, n int) []string {
+	if n <= 0 {
+		n = 1
+	}
+	results := make([]string, n)
+	var wg sync.WaitGroup
+
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			msgs := []map[string]any{{"role": "user", "content": prompt}}
+			chatReq := &chatCompletionRequest{
+				Model:    spec.ModelName,
+				Messages: msgs,
+			}
+			urls := s.captureImageURLs(r, chatReq, spec)
+			if len(urls) > 0 {
+				results[idx] = urls[0]
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Collect non-empty results preserving order.
+	out := make([]string, 0, n)
+	for _, u := range results {
+		if u != "" {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // extractImageURLsFromMarkdown returns URLs found in markdown image syntax.

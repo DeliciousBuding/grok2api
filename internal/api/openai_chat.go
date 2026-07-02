@@ -72,7 +72,11 @@ func (s *Server) handleChatCompletions(c *gin.Context) {
 	case spec.IsImageEdit():
 		s.runGrokChatWithRetry(c, &req, spec, stream)
 	case spec.IsImage():
-		s.runGrokChatWithRetry(c, &req, spec, stream)
+		if grok.IsWSImageModel(spec.ModelName) {
+			s.runWSImageChat(c, &req, spec, stream)
+		} else {
+			s.runGrokChatWithRetry(c, &req, spec, stream)
+		}
 	case spec.IsVideo():
 		s.runGrokChatWithRetry(c, &req, spec, stream)
 	default:
@@ -200,9 +204,6 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 					chunk := makeStreamChunk(completionID, created, modelName, md, "", false)
 					sw.writeJSONData(chunk)
 				case grok.EventImageProgress:
-					if !emitThink {
-						continue
-					}
 					progress := "image generating " + ev.Content + "%"
 					chunk := makeStreamChunk(completionID, created, modelName, "", progress, false)
 					chunk["choices"].([]any)[0].(map[string]any)["delta"] = map[string]any{"reasoning_content": progress}
@@ -244,6 +245,8 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 				textBuf = append(textBuf, ev.Content)
 			case grok.EventThinking:
 				thinkingBuf = append(thinkingBuf, ev.Content)
+			case grok.EventImageProgress:
+				thinkingBuf = append(thinkingBuf, "image generating "+ev.Content+"%\n")
 			case grok.EventImage:
 				imageURLs = append(imageURLs, [2]string{ev.Content, ev.ImageID})
 			}
@@ -433,4 +436,225 @@ func (s *Server) feedbackError(token string, err error, modeID int) {
 // readAllBody reads up to limit bytes from r and returns the body.
 func readAllBody(r io.Reader, limit int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(r, limit))
+}
+
+// runWSImageChat handles chat completions for WS-based image models
+// (grok-imagine-image, grok-imagine-image-pro).  It routes through the
+// WS imagine endpoint and returns results in chat completion format.
+func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec *model.Spec, stream bool) {
+	// Extract prompt from messages.
+	prompt := extractImagePrompt(req.Messages)
+	if prompt == "" {
+		writeAppError(c, platform.ValidationError("Empty prompt for image generation", "messages"))
+		return
+	}
+
+	n := 1
+	size := "1024x1024"
+	if req.ImageConfig != nil {
+		if req.ImageConfig.N > 0 {
+			n = req.ImageConfig.N
+		}
+		if req.ImageConfig.Size != "" {
+			size = req.ImageConfig.Size
+		}
+	}
+	if n > 10 {
+		n = 10
+	}
+
+	aspectRatio := grok.ResolveAspectRatio(size)
+	enableNSFW := config.Global().GetBool("features.enable_nsfw", true)
+	enablePro := grok.IsProImageModel(spec.ModelName)
+	emitThink := resolveEmitThink(req.ReasoningEffort)
+
+	apiToken, _ := c.Get("api_token")
+	ssoToken, _ := apiToken.(string)
+
+	// Reserve an account.
+	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+	if lease == nil {
+		if s.Refresh != nil {
+			_ = s.Refresh.RefreshOnDemand(c.Request.Context())
+			lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+		}
+	}
+	if lease == nil && ssoToken != "" {
+		lease = &account.Lease{Token: ssoToken, ModeID: int(spec.ModeId)}
+	}
+	if lease == nil {
+		writeAppError(c, platform.RateLimitError("No available accounts"))
+		return
+	}
+	defer s.Directory.Release(lease)
+
+	completionID := "chatcmpl-" + uuid.NewString()
+	created := time.Now().Unix()
+	modelName := req.Model
+
+	streamGen := grok.NewImagineStream(lease.Token)
+	events := streamGen.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
+
+	if stream {
+		sw := newSSEWriter(c.Writer)
+		sw.writeComment("heartbeat")
+
+		progressMap := map[string]int{}
+		completedIDs := map[string]bool{}
+		lastProgress := -1
+
+		for ev := range events {
+			switch ev.Type {
+			case grok.ImagineEventProgress:
+				progressMap[ev.ImageID] = ev.Progress
+				aggregate := computeAggregateProgress(progressMap, n)
+				if emitThink && aggregate > lastProgress {
+					lastProgress = aggregate
+					completed := countCompleted(completedIDs)
+					reason := grok.FormatImageProgress("图片", aggregate, completed, n)
+					chunk := makeStreamChunk(completionID, created, modelName, "", reason+"\n", false)
+					chunk["choices"].([]any)[0].(map[string]any)["delta"] = map[string]any{"reasoning_content": reason + "\n"}
+					sw.writeJSONData(chunk)
+				}
+			case grok.ImagineEventImage:
+				completedIDs[ev.ImageID] = true
+				progressMap[ev.ImageID] = 100
+				url := ev.URL
+				if url != "" {
+					url = grok.ImageBaseURL + strings.TrimPrefix(url, "/")
+				}
+				md := "![image](" + url + ")"
+				chunk := makeStreamChunk(completionID, created, modelName, md, "", false)
+				sw.writeJSONData(chunk)
+			case grok.ImagineEventError:
+				sw.writeOpenAIError(ev.Error, "upstream_error", "", "")
+				return
+			}
+		}
+
+		finalChunk := makeStreamChunk(completionID, created, modelName, "", "", true)
+		sw.writeJSONData(finalChunk)
+		sw.writeDone()
+		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+		return
+	}
+
+	// Non-streaming: collect all images.
+	var imageURLs []string
+	var thinkingUpdates []string
+	progressMap := map[string]int{}
+	completedIDs := map[string]bool{}
+
+	for ev := range events {
+		switch ev.Type {
+		case grok.ImagineEventProgress:
+			progressMap[ev.ImageID] = ev.Progress
+			if emitThink {
+				completed := countCompleted(completedIDs)
+				reason := grok.FormatImageProgress("图片", computeAggregateProgress(progressMap, n), completed, n)
+				if len(thinkingUpdates) == 0 || thinkingUpdates[len(thinkingUpdates)-1] != reason {
+					thinkingUpdates = append(thinkingUpdates, reason)
+				}
+			}
+		case grok.ImagineEventImage:
+			completedIDs[ev.ImageID] = true
+			progressMap[ev.ImageID] = 100
+			url := ev.URL
+			if url != "" {
+				url = grok.ImageBaseURL + strings.TrimPrefix(url, "/")
+				imageURLs = append(imageURLs, url)
+			}
+		case grok.ImagineEventError:
+			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
+			s.feedbackError(lease.Token, platform.UpstreamError(ev.Error, 502, ""), lease.ModeID)
+			return
+		}
+	}
+
+	text := ""
+	if len(imageURLs) > 0 {
+		var mds []string
+		for _, u := range imageURLs {
+			mds = append(mds, "![image]("+u+")")
+		}
+		text = strings.Join(mds, "\n\n")
+	}
+	thinking := ""
+	if len(thinkingUpdates) > 0 {
+		thinking = strings.Join(thinkingUpdates, "\n")
+	}
+	resp := makeChatResponse(completionID, created, modelName, text, thinking, emitThink)
+	b, _ := json.Marshal(resp)
+	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	c.Writer.WriteHeader(http.StatusOK)
+	_, _ = c.Writer.Write(b)
+	s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+}
+
+// extractImagePrompt extracts the text prompt from chat messages.
+func extractImagePrompt(messages []map[string]any) string {
+	var prompt string
+	for _, msg := range messages {
+		role, _ := msg["role"].(string)
+		if role == "system" || role == "developer" {
+			continue
+		}
+		switch c := msg["content"].(type) {
+		case string:
+			if c != "" {
+				prompt = c
+			}
+		case []any:
+			for _, item := range c {
+				bm, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				t, _ := bm["type"].(string)
+				if t == "text" {
+					text, _ := bm["text"].(string)
+					if text != "" {
+						prompt = text
+					}
+				}
+			}
+		}
+	}
+	return strings.TrimSpace(prompt)
+}
+
+// computeAggregateProgress computes the aggregate progress across all slots.
+func computeAggregateProgress(progressMap map[string]int, total int) int {
+	if total <= 0 {
+		return 100
+	}
+	if len(progressMap) == 0 {
+		return 0
+	}
+	sum := 0
+	count := 0
+	for _, v := range progressMap {
+		p := v
+		if p < 0 {
+			p = 0
+		}
+		if p > 100 {
+			p = 100
+		}
+		sum += p
+		count++
+	}
+	if count == 0 {
+		return 0
+	}
+	result := sum / total
+	if result > 100 {
+		result = 100
+	}
+	return result
+}
+
+// countCompleted counts the number of completed image IDs.
+func countCompleted(completedIDs map[string]bool) int {
+	return len(completedIDs)
 }
