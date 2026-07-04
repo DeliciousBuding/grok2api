@@ -221,7 +221,9 @@ data: {"type":"message_stop"}
 
 ### `POST /v1/images/generations`
 
-OpenAI-compatible image generation endpoint.
+OpenAI-compatible image generation endpoint. Use this for `grok-imagine-image-lite` (HTTP-based).
+
+> **Note**: `grok-imagine-image` and `grok-imagine-image-pro` use WebSocket-based real-time generation. They can also be called through `POST /v1/chat/completions` — the gateway auto-detects the model and routes accordingly, returning generated images as `![image](url)` in the response content.
 
 ```json
 {
@@ -235,7 +237,7 @@ OpenAI-compatible image generation endpoint.
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `model` | string | **required** | `grok-imagine-image-lite`, `grok-imagine-image`, or `grok-imagine-image-pro` |
+| `model` | string | **required** | `grok-imagine-image-lite` (HTTP), `grok-imagine-image` (WebSocket), or `grok-imagine-image-pro` (WebSocket). WebSocket models are recommended via `/v1/chat/completions` for real-time streaming. |
 | `prompt` | string | **required** | Image description |
 | `n` | int | `1` | Number of images (max 4 for lite, 10 for others) |
 | `size` | string | — | Image dimensions |
@@ -376,13 +378,13 @@ Get a single model by ID.
 
 #### Media Models
 
-| Model | Capability |
-|---|---|
-| `grok-imagine-image-lite` | Image generation (basic) |
-| `grok-imagine-image` | Image generation |
-| `grok-imagine-image-pro` | Image generation (pro) |
-| `grok-imagine-image-edit` | Image editing |
-| `grok-imagine-video` | Video generation |
+| Model | Capability | Transport |
+|---|---|---|
+| `grok-imagine-image-lite` | Image generation (basic) | HTTP (grok.com chat) |
+| `grok-imagine-image` | Image generation | WebSocket (real-time streaming) |
+| `grok-imagine-image-pro` | Image generation (pro) | WebSocket (real-time streaming) |
+| `grok-imagine-image-edit` | Image editing | HTTP (grok.com chat) |
+| `grok-imagine-video` | Video generation | HTTP (grok.com chat) |
 
 ---
 
@@ -524,6 +526,21 @@ curl http://localhost:8000/v1/images/generations \
     "n": 2
   }'
 ```
+
+### curl — Image Generation via Chat (WebSocket)
+
+```bash
+curl http://localhost:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "model": "grok-imagine-image",
+    "messages": [{"role": "user", "content": "A cat in space"}],
+    "image_config": {"n": 2, "size": "1024x1024"}
+  }'
+```
+
+> WebSocket models (`grok-imagine-image`, `grok-imagine-image-pro`) generate images in real-time with progress updates. Results are returned as `![image](url)` in the response content.
 
 ### curl — Anthropic Format
 

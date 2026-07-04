@@ -9,6 +9,7 @@
 - **多账号池管理** — 支持 basic / super / heavy 三级账号池，自动配额跟踪
 - **智能选号** — 配额感知策略（按剩余配额评分）和随机策略，自动故障转移
 - **浏览器指纹伪装** — TLS 指纹、HTTP/2 头序、Chrome 客户端提示，规避上游检测
+- **WebSocket 图像生成** — 通过 `wss://grok.com/ws/imagine/listen` 实时流式生成图像，支持进度回调
 - **纯 Go 生成反 bot 头** — `x-statsig-id` 等头由内置算法实时生成，无需浏览器或 JS 运行时
 - **代理支持** — 直连 / 单代理，兼容 HTTP/HTTPS/SOCKS4/5
 - **Cloudflare 绕过** — 手动 Cookie 注入，`cf_clearance` 自动提取
@@ -172,11 +173,21 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ..."
 app_key = "grok2api"           # 管理后台密码
 api_key = ""                    # API 密钥（留空不鉴权，逗号分隔多个）
 
+[logging]
+file_level = "INFO"             # 文件日志级别
+max_files = 7                   # 日志文件最大保留数
+
 [features]
 stream = true                   # 默认流式响应
 thinking = true                 # 输出思考过程
 temporary = true                # 临时对话（不保存历史）
+memory = false                  # 会话记忆
 auto_chat_mode_fallback = true  # AUTO 模型自动降级到 fast/expert
+custom_instruction = ""         # 全局附加指令（系统提示）
+
+[cache.local]
+image_max_mb = 0                # 图片缓存上限（MB），0 = 不限制
+video_max_mb = 0                # 视频缓存上限（MB），0 = 不限制
 
 [proxy.egress]
 proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SOCKS4/5
@@ -184,11 +195,30 @@ proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SO
 [proxy.clearance]
 cf_cookies = ""                 # 手动模式：浏览器 Cookie 串（含 cf_clearance）
 user_agent = "..."              # 需与抓取 Cookie 时的 UA 一致
-statsig_seed = ""                # 可选：真实 statsig 种子（不配则用内置生成）
-statsig_hex  = ""                # 可选：真实 statsig HEX 指纹
+statsig_seed = ""               # 可选：真实 statsig 种子（不配则用内置生成）
+statsig_hex  = ""               # 可选：真实 statsig HEX 指纹
+
+[retry]
+max_retries = 1                 # 换账号重试最大次数（0 = 不重试）
+on_codes = "429,401,503"        # 触发重试的 HTTP 状态码
+reset_session_status_codes = [403]  # 触发重建代理 Session 的状态码
 
 [account.refresh]
 enabled = true                  # true=配额模式；false=随机模式
+basic_interval_sec = 86400      # basic 池刷新间隔（秒）
+super_interval_sec = 7200       # super 池刷新间隔（秒）
+heavy_interval_sec = 7200       # heavy 池刷新间隔（秒）
+
+[account.selection]
+max_inflight = 8                # 单号并发上限
+
+[asset]
+upload_timeout = 60             # 资源上传超时（秒）
+list_timeout = 60               # 资源列表超时（秒）
+delete_timeout = 60             # 资源删除超时（秒）
+
+[nsfw]
+timeout = 60                    # NSFW 设置超时（秒）
 ```
 
 > `config.defaults.toml` 内置全部默认值，`data/config.toml` 只需覆盖你想修改的项即可。
@@ -204,6 +234,9 @@ enabled = true                  # true=配额模式；false=随机模式
 | `DATA_DIR` | 数据目录 | `./data` |
 | `ACCOUNT_LOCAL_PATH` | 账号存储路径 | `./data/accounts.jsonl` |
 | `PROXY_HTTP` | 代理地址（覆盖配置文件） | _(空)_ |
+| `GROK_SECTION_KEY` | 配置覆盖（映射到 `section.key`） | _(空)_ |
+
+> `GROK_*` 环境变量可用于覆盖任意配置项。例如 `GROK_FEATURES_STREAM=false` 等同于 `features.stream = false`。
 
 ## 账号池与模型
 
@@ -219,9 +252,9 @@ enabled = true                  # true=配额模式；false=随机模式
 
 **grok.com 聊天**：`grok-4.20-0309`、`grok-4.20-0309-reasoning`、`grok-4.20-heavy`、`grok-4.20-multi-agent-0309` 等 16 个模型
 
-**Console**：`grok-4.3-console`、`grok-4.3-high`、`grok-4.20-multi-agent-xhigh` 等 13 个模型（通过 console.x.ai，免费额度）
+**Console**：`grok-4.3-console`、`grok-4.3-high`、`grok-4.20-multi-agent-xhigh`、`grok-4.20-0309-non-reasoning-console`、`grok-build-console` 等 13 个模型（通过 console.x.ai，免费额度）
 
-**媒体**：`grok-imagine-image`、`grok-imagine-image-pro`、`grok-imagine-image-edit`、`grok-imagine-video`
+**媒体**：`grok-imagine-image-lite`、`grok-imagine-image`、`grok-imagine-image-pro`（WebSocket 实时生成）、`grok-imagine-image-edit`、`grok-imagine-video`
 
 完整模型列表见 [API.md](API.md)。
 
