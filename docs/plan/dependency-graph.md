@@ -1,4 +1,4 @@
-最后更新：2026-07-06 01:55
+最后更新：2026-07-06 03:10
 
 # Dependency Graph
 
@@ -9,4 +9,5 @@ graph TD
   P2 --> P4["Phase 4: Upstream Robustness"]
   P3 --> P4
   P4 --> P5["Phase 5: Release Hardening"]
+  P5 --> P6["Phase 6: Runtime Resilience"]
 ```

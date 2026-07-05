@@ -453,7 +453,13 @@ grok2api_retries_total{model="grok-4.20-fast",reason="429",surface="chat"} 1
 grok2api_upstream_responses_total{model="grok-4.20-fast",status="429",surface="chat"} 1
 grok2api_account_feedback_total{kind="rate_limited"} 1
 grok2api_empty_outputs_total{model="grok-4.20-fast",surface="responses"} 1
+grok2api_http_request_duration_seconds_bucket{le="0.5",method="POST",path="/v1/chat/completions",status="200"} 1
+grok2api_http_request_duration_seconds_bucket{le="+Inf",method="POST",path="/v1/chat/completions",status="200"} 1
+grok2api_http_request_duration_seconds_sum{method="POST",path="/v1/chat/completions",status="200"} 0.42
+grok2api_http_request_duration_seconds_count{method="POST",path="/v1/chat/completions",status="200"} 1
 ```
+
+Request-duration histogram labels use the HTTP method, Gin route pattern, and status code to avoid token or path-parameter leakage.
 
 ### `GET /v1/files/image?id=<file_id>`
 

@@ -19,8 +19,9 @@ type Gauge struct {
 // Registry stores process-local counters. It deliberately renders Prometheus
 // text directly to keep the gateway dependency-light.
 type Registry struct {
-	mu       sync.Mutex
-	counters map[string]*counter
+	mu         sync.Mutex
+	counters   map[string]*counter
+	histograms map[string]*histogram
 }
 
 type counter struct {
@@ -28,6 +29,17 @@ type counter struct {
 	labels map[string]string
 	value  uint64
 }
+
+type histogram struct {
+	name         string
+	labels       map[string]string
+	buckets      []float64
+	bucketCounts []uint64
+	count        uint64
+	sum          float64
+}
+
+var requestDurationBuckets = []float64{0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
 
 var counterHelp = map[string]string{
 	"grok2api_attempts_total":           "Upstream attempt count.",
@@ -46,7 +58,7 @@ var counterOrder = []string{
 }
 
 func NewRegistry() *Registry {
-	return &Registry{counters: map[string]*counter{}}
+	return &Registry{counters: map[string]*counter{}, histograms: map[string]*histogram{}}
 }
 
 func (r *Registry) IncAttempt(surface, model string) {
@@ -73,6 +85,24 @@ func (r *Registry) IncEmptyOutput(surface, model string) {
 	r.add("grok2api_empty_outputs_total", map[string]string{"surface": surface, "model": model}, 1)
 }
 
+func (r *Registry) ObserveRequestDuration(method, path string, status int, seconds float64) {
+	if method == "" {
+		method = "UNKNOWN"
+	}
+	if path == "" {
+		path = "unmatched"
+	}
+	if seconds < 0 {
+		seconds = 0
+	}
+	r.observeHistogram(
+		"grok2api_http_request_duration_seconds",
+		map[string]string{"method": method, "path": path, "status": strconv.Itoa(status)},
+		requestDurationBuckets,
+		seconds,
+	)
+}
+
 func (r *Registry) add(name string, labels map[string]string, delta uint64) {
 	if r == nil {
 		return
@@ -88,6 +118,35 @@ func (r *Registry) add(name string, labels map[string]string, delta uint64) {
 	c.value += delta
 }
 
+func (r *Registry) observeHistogram(name string, labels map[string]string, buckets []float64, value float64) {
+	if r == nil {
+		return
+	}
+	key := name + "\xff" + labelKey(labels)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.histograms == nil {
+		r.histograms = map[string]*histogram{}
+	}
+	h := r.histograms[key]
+	if h == nil {
+		h = &histogram{
+			name:         name,
+			labels:       copyLabels(labels),
+			buckets:      append([]float64(nil), buckets...),
+			bucketCounts: make([]uint64, len(buckets)),
+		}
+		r.histograms[key] = h
+	}
+	for i, bucket := range h.buckets {
+		if value <= bucket {
+			h.bucketCounts[i]++
+		}
+	}
+	h.count++
+	h.sum += value
+}
+
 func (r *Registry) RenderText(gauges []Gauge) string {
 	var b strings.Builder
 	counters := r.snapshotCounters()
@@ -100,6 +159,25 @@ func (r *Registry) RenderText(gauges []Gauge) string {
 				writeSample(&b, c.name, c.labels, float64(c.value))
 			}
 		}
+	}
+
+	histograms := r.snapshotHistograms()
+	seenHistograms := map[string]bool{}
+	for _, h := range histograms {
+		if !seenHistograms[h.name] {
+			writeHelpType(&b, h.name, "HTTP request duration in seconds.", "histogram")
+			seenHistograms[h.name] = true
+		}
+		for i, bucket := range h.buckets {
+			labels := copyLabels(h.labels)
+			labels["le"] = formatBucket(bucket)
+			writeSample(&b, h.name+"_bucket", labels, float64(h.bucketCounts[i]))
+		}
+		labels := copyLabels(h.labels)
+		labels["le"] = "+Inf"
+		writeSample(&b, h.name+"_bucket", labels, float64(h.count))
+		writeSample(&b, h.name+"_sum", h.labels, h.sum)
+		writeSample(&b, h.name+"_count", h.labels, float64(h.count))
 	}
 
 	sort.Slice(gauges, func(i, j int) bool {
@@ -165,6 +243,32 @@ func (r *Registry) snapshotCounters() []*counter {
 	return out
 }
 
+func (r *Registry) snapshotHistograms() []*histogram {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*histogram, 0, len(r.histograms))
+	for _, h := range r.histograms {
+		out = append(out, &histogram{
+			name:         h.name,
+			labels:       copyLabels(h.labels),
+			buckets:      append([]float64(nil), h.buckets...),
+			bucketCounts: append([]uint64(nil), h.bucketCounts...),
+			count:        h.count,
+			sum:          h.sum,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].name == out[j].name {
+			return labelKey(out[i].labels) < labelKey(out[j].labels)
+		}
+		return out[i].name < out[j].name
+	})
+	return out
+}
+
 func writeHelpType(b *strings.Builder, name, help, typ string) {
 	if help != "" {
 		fmt.Fprintf(b, "# HELP %s %s\n", name, help)
@@ -206,6 +310,10 @@ func labelKey(labels map[string]string) string {
 		parts = append(parts, k+"="+labels[k])
 	}
 	return strings.Join(parts, "\xff")
+}
+
+func formatBucket(v float64) string {
+	return strconv.FormatFloat(v, 'g', -1, 64)
 }
 
 func copyLabels(labels map[string]string) map[string]string {

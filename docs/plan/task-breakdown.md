@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:18
+最后更新：2026-07-06 03:10
 
 # Task Breakdown
 
@@ -35,3 +35,10 @@
 - [x] Add sample compose file with resource limits and health checks.
 - [x] Add public operations runbook.
 - [x] Run `go test ./...` and local Docker build.
+
+## Phase 6: Runtime Resilience
+
+- [x] Add Prometheus request-duration histograms with stable, low-cardinality labels.
+- [x] Add configurable upstream stream idle timeout for long-lived SSE paths.
+- [x] Add dependency-free load smoke command with error-rate and p95 thresholds.
+- [x] Run full verification and update PR/GitHub tracking.

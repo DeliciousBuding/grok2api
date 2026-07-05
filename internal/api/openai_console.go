@@ -116,8 +116,17 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 		scanner := bufio.NewScanner(bodyReader)
 		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
 		var currentEvent string
-		for scanner.Scan() {
-			line := scanner.Text()
+		lines := newIdleLineScanner(scanner, bodyReader, streamIdleTimeoutDuration())
+		defer lines.Close()
+		for {
+			line, ok, err := lines.Next(ctx)
+			if err != nil {
+				sw.writeOpenAIAppError(err)
+				return nil
+			}
+			if !ok {
+				break
+			}
 			kind, value := grok.ClassifyConsoleLine(line)
 			if kind == "done" {
 				break

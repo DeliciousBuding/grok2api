@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:18
+最后更新：2026-07-06 03:10
 
 # Risk Assessment
 
@@ -28,11 +28,13 @@
 - Docker image build now includes the default config file, runs as a non-root user, and exposes image-level healthcheck metadata.
 - Release workflow publishes GHCR images with `GITHUB_TOKEN`, metadata tags, Buildx cache, provenance, and SBOM enabled.
 - Public Compose and operations runbook cover health checks, resource limits, update, backup, and rollback procedures.
+- Request-duration histograms expose route-pattern latency without token or path-parameter leakage.
+- Streaming chat and console paths enforce a configurable upstream idle timeout.
+- `cmd/load-smoke` provides a dependency-free load gate with error-rate and p95 thresholds.
 
 ## Remaining Risks
 
-- Metrics do not yet include latency histograms or external dashboards.
-- Streaming handlers still lack per-chunk idle timeout enforcement.
-- No load-test harness or chaos/failure simulation yet.
+- External dashboards and alert rules are still deployment-specific.
+- Chaos/failure simulation beyond load smoke is still future work.
 - Admin APIs need more validation and pagination tests.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.

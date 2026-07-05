@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -49,6 +50,7 @@ func (s *Server) Router() *gin.Engine {
 	engine.Use(gin.Recovery())
 	engine.Use(logMiddleware())
 	engine.Use(configReloadMiddleware())
+	engine.Use(s.metricsMiddleware())
 	engine.Use(requestSizeMiddleware())
 	engine.Use(s.globalAdmissionMiddleware())
 	engine.Use(corsMiddleware())
@@ -189,6 +191,23 @@ func requestSizeMiddleware() gin.HandlerFunc {
 			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, int64(limit))
 		}
 		c.Next()
+	}
+}
+
+func (s *Server) metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
+		}
+		s.metricsRegistry().ObserveRequestDuration(
+			c.Request.Method,
+			path,
+			c.Writer.Status(),
+			time.Since(start).Seconds(),
+		)
 	}
 }
 

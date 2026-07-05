@@ -80,6 +80,26 @@ func TestMetricsEndpointIncludesOperationalCounters(t *testing.T) {
 	}
 }
 
+func TestMetricsEndpointIncludesRequestDurationHistogram(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(nil, nil, nil, nil, nil)
+	router := server.Router()
+
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	needle := `grok2api_http_request_duration_seconds_count{method="GET",path="/health",status="200"} 1`
+	if !strings.Contains(w.Body.String(), needle) {
+		t.Fatalf("expected metrics output to contain %q, got:\n%s", needle, w.Body.String())
+	}
+}
+
 func TestReadyEndpointReportsNotReadyWithoutAccountPool(t *testing.T) {
 	loadTestConfig(t, "")
 	server := NewServer(nil, nil, nil, nil, nil)

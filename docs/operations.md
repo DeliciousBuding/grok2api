@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:05
+最后更新：2026-07-06 03:10
 
 # Operations Runbook
 
@@ -39,7 +39,7 @@ Expected behavior:
 
 - `/health` returns HTTP 200 when the process is serving.
 - `/ready` reports account-pool readiness and observed upstream degradation.
-- `/metrics` exposes aggregate counters and gauges without token values.
+- `/metrics` exposes aggregate counters, gauges, and request-duration histograms without token values.
 
 ## Capacity Controls
 
@@ -58,9 +58,41 @@ max_inflight = 8
 
 [retry]
 max_retries = 1
+
+[timeout]
+stream_idle_sec = 60
 ```
 
 Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
+
+## Load Smoke Test
+
+The repository includes a dependency-free load smoke command. The default target is `/health`, so it is safe to run before adding account credentials.
+
+```bash
+go run ./cmd/load-smoke \
+  -base-url http://127.0.0.1:8000 \
+  -path /health \
+  -concurrency 16 \
+  -duration 30s \
+  -max-error-rate 0.01 \
+  -max-p95-ms 500
+```
+
+For authenticated API checks, pass headers and a request body file:
+
+```bash
+go run ./cmd/load-smoke \
+  -base-url http://127.0.0.1:8000 \
+  -method POST \
+  -path /v1/chat/completions \
+  -header "Authorization: Bearer <api-key>" \
+  -body @chat-request.json \
+  -concurrency 8 \
+  -duration 30s
+```
+
+Do not store real API keys, SSO tokens, or cookie values in this repository.
 
 ## Updates
 

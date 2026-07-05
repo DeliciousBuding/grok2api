@@ -1,4 +1,4 @@
-最后更新：2026-07-06 02:31
+最后更新：2026-07-06 03:10
 
 # Module Inventory
 
@@ -11,7 +11,7 @@
 | `internal/config` | TOML defaults, user config, env overrides | Simple and useful; path reload semantics needed tests and was improved. | Medium |
 | `internal/storage` | Local media cache | SQLite-backed cache with cleanup logic; needs quota and corruption tests before expansion. | Medium |
 | `internal/tlsclient` | fhttp/tls-client adapter | Correctly hides implementation details behind stdlib-like transport. | Medium |
-| `internal/metrics` | Process-local counters and Prometheus text rendering | Small replaceable registry with stable labels; no latency histograms yet. | Medium |
+| `internal/metrics` | Process-local counters, histograms, and Prometheus text rendering | Small replaceable registry with stable labels and request-duration histogram support. | Medium |
 | `internal/logger` | Logging setup | Minimal. Request metrics now live in `internal/metrics`; structured logs remain future work. | Low |
 
 ## Priority Hotspots

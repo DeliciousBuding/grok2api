@@ -192,8 +192,17 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 		first := true
 		scanner := bufio.NewScanner(bodyReader)
 		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-		for scanner.Scan() {
-			line := scanner.Text()
+		lines := newIdleLineScanner(scanner, bodyReader, streamIdleTimeoutDuration())
+		defer lines.Close()
+		for {
+			line, ok, err := lines.Next(ctx)
+			if err != nil {
+				sw.writeOpenAIAppError(err)
+				return nil
+			}
+			if !ok {
+				break
+			}
 			kind, data := grok.ClassifyLine(line)
 			if kind == "done" {
 				break

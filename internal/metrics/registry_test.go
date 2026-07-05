@@ -53,3 +53,25 @@ func TestRegistryReportsUpstreamHealth(t *testing.T) {
 		t.Fatalf("mostly successful upstream health should be ok, got %q", got)
 	}
 }
+
+func TestRegistryRendersRequestDurationHistogram(t *testing.T) {
+	reg := NewRegistry()
+	reg.ObserveRequestDuration("POST", "/v1/chat/completions", 200, 0.42)
+	reg.ObserveRequestDuration("POST", "/v1/chat/completions", 200, 3.2)
+
+	out := reg.RenderText(nil)
+
+	want := []string{
+		`# TYPE grok2api_http_request_duration_seconds histogram`,
+		`grok2api_http_request_duration_seconds_bucket{le="0.5",method="POST",path="/v1/chat/completions",status="200"} 1`,
+		`grok2api_http_request_duration_seconds_bucket{le="5",method="POST",path="/v1/chat/completions",status="200"} 2`,
+		`grok2api_http_request_duration_seconds_bucket{le="+Inf",method="POST",path="/v1/chat/completions",status="200"} 2`,
+		`grok2api_http_request_duration_seconds_sum{method="POST",path="/v1/chat/completions",status="200"} 3.62`,
+		`grok2api_http_request_duration_seconds_count{method="POST",path="/v1/chat/completions",status="200"} 2`,
+	}
+	for _, needle := range want {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected metrics output to contain %q, got:\n%s", needle, out)
+		}
+	}
+}

@@ -88,6 +88,8 @@ console_sec = 300
 image_sec = 300
 # 视频上游超时（秒）
 video_sec = 600
+# 流式响应上游单次静默超时（秒），0 = 禁用
+stream_idle_sec = 60
 # 管理操作超时（秒）
 admin_sec = 60
 

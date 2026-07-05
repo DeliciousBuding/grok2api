@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:18
+最后更新：2026-07-06 03:10
 
 # Progress Master
 
@@ -17,6 +17,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - [x] Phase 3: Observability (3/3 tasks) — #3
 - [x] Phase 4: Upstream Robustness (3/3 tasks) — #4
 - [x] Phase 5: Release Hardening (4/4 tasks) — #5
+- [x] Phase 6: Runtime Resilience (4/4 tasks) — #6
 
 ## GitHub Tracking
 
@@ -25,6 +26,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 3 issue: https://github.com/DeliciousBuding/grok2api/issues/3
 - Phase 4 issue: https://github.com/DeliciousBuding/grok2api/issues/4
 - Phase 5 issue: https://github.com/DeliciousBuding/grok2api/issues/5
+- Phase 6 issue: https://github.com/DeliciousBuding/grok2api/issues/6
 
 ## Verification
 
@@ -46,6 +48,12 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 5 release hardening.
 - `docker build -t grok2api:codex-phase5 .` passed during Phase 5 release hardening.
 - `docker image inspect grok2api:codex-phase5` confirmed non-root user and healthcheck metadata.
+- `go test -count=1 ./...` passed during Phase 6 runtime resilience.
+- `go build -trimpath -ldflags "-s -w" -o <temp binary> .` passed during Phase 6 runtime resilience.
+- `docker build -t grok2api:codex-phase6 .` passed during Phase 6 runtime resilience.
+- `docker compose -f deploy/compose.example.yml config` passed during Phase 6 runtime resilience.
+- `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 6 runtime resilience.
+- Local `go run ./cmd/load-smoke -base-url http://127.0.0.1:18080 -path /health -concurrency 4 -duration 1s -max-error-rate 0 -max-p95-ms 1000` passed against a temporary local process.
 
 ## Governance
 
@@ -61,3 +69,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 3 actual effort: medium. S.U.P.E.R score improved to high for observability ports. Unplanned dependency count: 1 (readiness uses observed upstream counters instead of a live upstream probe).
 - Phase 4 actual effort: medium. S.U.P.E.R score remains high with improved upstream boundary controls. Unplanned dependency count: 1 (admin endpoints also needed timeout-class coverage).
 - Phase 5 actual effort: medium. S.U.P.E.R score improved to high for environment-agnostic release surfaces. Unplanned dependency count: 2 (Docker image was missing `config.defaults.toml`; Compose rejected combined pids/resource limits).
+- Phase 6 actual effort: medium. S.U.P.E.R score improved to high for runtime observability and resilience. Unplanned dependency count: 1 (`cmd/load-smoke` initially counted duration-cancelled in-flight requests as failures; fixed by separating stop-new-work from per-request timeout).
