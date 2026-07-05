@@ -9,7 +9,7 @@ package account
 
 const (
 	BasicFastLimit        = 30
-	BasicFastWindowSec     = 86400
+	BasicFastWindowSec    = 86400
 	BasicConsoleLimit     = 20
 	BasicConsoleWindowSec = 3600
 	SuperWindowSec        = 7200

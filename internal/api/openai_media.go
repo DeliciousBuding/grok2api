@@ -18,12 +18,12 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
-	"github.com/aurora-develop/grok2api/internal/storage"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
 // fileIDRE matches a valid local media file ID (UUID-style hex with dashes).
@@ -101,6 +101,12 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+req.Model+"' is not an image model", "model", "invalid_model"))
 		return
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, req.Model)
+	if !ok {
+		return
+	}
+	defer releaseAdmission()
+
 	n := req.N
 	if n <= 0 {
 		n = 1
@@ -169,9 +175,12 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 		writeAppError(c, platform.RateLimitError("No available accounts"))
 		return
 	}
-	defer s.Directory.Release(lease)
+	if s.Directory != nil {
+		defer s.Directory.Release(lease)
+	}
 
 	stream := grok.NewImagineStream(lease.Token)
+	s.metricsRegistry().IncAttempt("image_ws", spec.ModelName)
 	events := stream.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
 
 	type collectedImage struct {
@@ -188,10 +197,12 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			}
 			images = append(images, collectedImage{url: url, blob: ev.Blob})
 		case grok.ImagineEventError:
+			s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
 			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
 			return
 		}
 	}
+	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
 
 	out := []map[string]any{}
 	for i := 0; i < n && i < len(images); i++ {
@@ -235,6 +246,12 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+modelName+"' is not an image-edit model", "model", "invalid_model"))
 		return
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, modelName)
+	if !ok {
+		return
+	}
+	defer releaseAdmission()
+
 	responseFormat := strings.TrimSpace(c.Request.FormValue("response_format"))
 	if responseFormat == "" {
 		responseFormat = "url"
@@ -293,7 +310,9 @@ func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, s
 	if lease == nil {
 		return nil
 	}
-	defer s.Directory.Release(lease)
+	if s.Directory != nil {
+		defer s.Directory.Release(lease)
+	}
 
 	emitThink := resolveEmitThink(req.ReasoningEffort)
 	message, fileInputs, perr := extractMessages(req.Messages)
@@ -308,10 +327,13 @@ func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, s
 	if req.TopP != nil {
 		topP = *req.TopP
 	}
+	s.metricsRegistry().IncAttempt("image", req.Model)
 	err := s.runGrokChatOnce(cw, r, lease, spec, message, fileInputs, temp, topP, emitThink, false, req.Model)
 	if err != nil {
+		s.metricsRegistry().IncUpstreamStatus("image", req.Model, metricStatusCode(err))
 		return nil
 	}
+	s.metricsRegistry().IncUpstreamStatus("image", req.Model, http.StatusOK)
 
 	var obj map[string]any
 	if err := json.Unmarshal(cw.body, &obj); err != nil {
@@ -455,6 +477,11 @@ func (s *Server) handleVideoCreate(c *gin.Context) {
 	if size == "" {
 		size = "720x1280"
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, modelName)
+	if !ok {
+		return
+	}
+
 	job := &videoJob{
 		ID:        "video_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:24],
 		Object:    "video",
@@ -469,7 +496,7 @@ func (s *Server) handleVideoCreate(c *gin.Context) {
 	}
 	registerVideoJob(job)
 
-	go s.runVideoJob(job, prompt, modelName, spec)
+	go s.runVideoJob(job, prompt, modelName, spec, releaseAdmission)
 	c.JSON(http.StatusOK, job.toDict())
 }
 
@@ -496,8 +523,12 @@ func (s *Server) handleVideoGet(c *gin.Context) {
 }
 
 // runVideoJob executes the video generation in the background.
-func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *model.Spec) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *model.Spec, releaseAdmission func()) {
+	if releaseAdmission != nil {
+		defer releaseAdmission()
+	}
+	timeout := timeoutClassDuration("video", 600)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	job.Status = "in_progress"
 	job.Progress = 1
@@ -515,7 +546,9 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		}{Code: "video_generation_failed", Message: "no available accounts"}
 		return
 	}
-	defer s.Directory.Release(lease)
+	if s.Directory != nil {
+		defer s.Directory.Release(lease)
+	}
 
 	payload := grok.BuildChatPayload(promptWithFlag, model.ModeId(lease.ModeID), nil, nil, nil, map[string]any{
 		"enable_pro": false,
@@ -526,9 +559,12 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		s.failVideoJob(job, "encode video payload: "+err.Error())
 		return
 	}
+	s.metricsRegistry().IncAttempt("video", modelName)
 	bodyReader, err := s.Transport.PostStream(ctx, grok.Chat, lease.Token, body,
+		grok.WithTimeout(timeout),
 		grok.WithReferer("https://grok.com/imagine"))
 	if err != nil {
+		s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
 		s.failVideoJob(job, "video upstream: "+err.Error())
 		return
 	}
@@ -562,8 +598,10 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		job.Progress = 100
 		job.CompletedAt = &now
 		job.VideoURL = adapter.ImageURLs[0][0]
+		s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusOK)
 		return
 	}
+	s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusBadGateway)
 	s.failVideoJob(job, "no video URL in upstream response")
 }
 

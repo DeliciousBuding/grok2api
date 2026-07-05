@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // FrameEventKind enumerates the event kinds emitted by StreamAdapter.

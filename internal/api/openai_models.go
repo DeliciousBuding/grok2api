@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // handleModels returns the list of models currently available given the

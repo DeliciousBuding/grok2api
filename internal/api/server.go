@@ -4,15 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/platform"
-	"github.com/aurora-develop/grok2api/internal/storage"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/admission"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/metrics"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
 // Server bundles the dependencies every handler needs.
@@ -22,6 +25,8 @@ type Server struct {
 	Refresh   *account.RefreshService
 	Transport *grok.Transport
 	Media     *storage.LocalMediaCacheStore
+	Admission *admission.Controller
+	Metrics   *metrics.Registry
 }
 
 // NewServer constructs a Server bound to the given dependencies.
@@ -32,6 +37,8 @@ func NewServer(repo account.Repository, dir *account.Directory, refresh *account
 		Refresh:   refresh,
 		Transport: transport,
 		Media:     media,
+		Admission: admission.NewController(),
+		Metrics:   metrics.NewRegistry(),
 	}
 }
 
@@ -42,6 +49,8 @@ func (s *Server) Router() *gin.Engine {
 	engine.Use(gin.Recovery())
 	engine.Use(logMiddleware())
 	engine.Use(configReloadMiddleware())
+	engine.Use(requestSizeMiddleware())
+	engine.Use(s.globalAdmissionMiddleware())
 	engine.Use(corsMiddleware())
 
 	// Health/meta (no auth).
@@ -51,6 +60,8 @@ func (s *Server) Router() *gin.Engine {
 	engine.GET("/meta", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"version": "1.0.0"})
 	})
+	engine.GET("/metrics", s.handleMetrics)
+	engine.GET("/ready", s.handleReady)
 
 	// Public local media serving (no auth — file IDs are unguessable).
 	engine.GET("/v1/files/image", s.handleFileImage)
@@ -159,6 +170,168 @@ func corsMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func requestSizeMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		limit := config.Global().GetInt("server.max_body_bytes", 0)
+		if limit > 0 {
+			if c.Request.ContentLength > int64(limit) {
+				c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
+					"error": gin.H{
+						"message": "Request body too large",
+						"type":    "invalid_request_error",
+						"code":    "request_body_too_large",
+					},
+				})
+				return
+			}
+			c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, int64(limit))
+		}
+		c.Next()
+	}
+}
+
+func (s *Server) globalAdmissionMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method == http.MethodOptions || c.Request.Method == http.MethodGet {
+			c.Next()
+			return
+		}
+		if s.Admission == nil {
+			c.Next()
+			return
+		}
+		limit := config.Global().GetInt("admission.global_max_inflight", 0)
+		release, ok := s.Admission.TryAcquire("global", limit)
+		if !ok {
+			writeAdmissionRejected(c, "global")
+			return
+		}
+		defer release()
+		c.Next()
+	}
+}
+
+func (s *Server) acquireModelAdmission(c *gin.Context, modelName string) (func(), bool) {
+	if s.Admission == nil {
+		return func() {}, true
+	}
+	limit := config.Global().GetInt("admission.per_model_max_inflight", 0)
+	scope := "model:" + modelName
+	release, ok := s.Admission.TryAcquire(scope, limit)
+	if !ok {
+		writeAdmissionRejected(c, scope)
+		return nil, false
+	}
+	return release, true
+}
+
+func writeAdmissionRejected(c *gin.Context, scope string) {
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+		"error": gin.H{
+			"message": "Admission control exhausted",
+			"type":    "rate_limit_error",
+			"code":    "admission_control_exhausted",
+			"scope":   scope,
+		},
+	})
+}
+
+func (s *Server) handleMetrics(c *gin.Context) {
+	total := 0
+	active := 0
+	inflight := 0
+	if s.Directory != nil {
+		slots := s.Directory.Snapshot()
+		total = len(slots)
+		for _, slot := range slots {
+			if slot.StatusID == account.StatusIDActive {
+				active++
+			}
+			inflight += slot.Inflight
+		}
+	}
+	admissionInflight := 0
+	if s.Admission != nil {
+		for _, n := range s.Admission.Snapshot() {
+			admissionInflight += n
+		}
+	}
+	c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = c.Writer.Write([]byte(s.metricsRegistry().RenderText([]metrics.Gauge{
+		{Name: "grok2api_build_info", Help: "Build information.", Labels: map[string]string{"version": "1.0.0"}, Value: 1},
+		{Name: "grok2api_accounts_total", Help: "Accounts currently loaded in memory.", Value: float64(total)},
+		{Name: "grok2api_accounts_active", Help: "Active accounts currently selectable.", Value: float64(active)},
+		{Name: "grok2api_account_inflight", Help: "Current in-flight upstream requests across accounts.", Value: float64(inflight)},
+		{Name: "grok2api_admission_inflight", Help: "Current in-flight admitted requests.", Value: float64(admissionInflight)},
+	})))
+}
+
+func (s *Server) handleReady(c *gin.Context) {
+	total := 0
+	active := 0
+	inflight := 0
+	if s.Directory != nil {
+		slots := s.Directory.Snapshot()
+		total = len(slots)
+		for _, slot := range slots {
+			if slot.StatusID == account.StatusIDActive {
+				active++
+			}
+			inflight += slot.Inflight
+		}
+	}
+
+	accountStatus := "ok"
+	if active == 0 {
+		accountStatus = "not_ready"
+	}
+	upstreamStatus := s.metricsRegistry().UpstreamHealth()
+	status := "ready"
+	code := http.StatusOK
+	if accountStatus != "ok" {
+		status = "not_ready"
+		code = http.StatusServiceUnavailable
+	} else if upstreamStatus == "degraded" {
+		status = "degraded"
+	}
+
+	c.JSON(code, gin.H{
+		"status": status,
+		"checks": gin.H{
+			"process": gin.H{"status": "ok"},
+			"account_pool": gin.H{
+				"status":   accountStatus,
+				"total":    total,
+				"active":   active,
+				"inflight": inflight,
+			},
+			"upstream": gin.H{"status": upstreamStatus},
+		},
+	})
+}
+
+func (s *Server) metricsRegistry() *metrics.Registry {
+	if s.Metrics == nil {
+		s.Metrics = metrics.NewRegistry()
+	}
+	return s.Metrics
+}
+
+func metricStatusCode(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	var appErr *platform.AppError
+	if errors.As(err, &appErr) && appErr.Status > 0 {
+		return appErr.Status
+	}
+	return http.StatusInternalServerError
+}
+
+func metricReason(status int) string {
+	return strconv.Itoa(status)
 }
 
 // logMiddleware logs each request line at debug level.

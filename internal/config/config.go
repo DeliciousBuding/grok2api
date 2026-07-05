@@ -21,12 +21,12 @@ import (
 // Snapshot is the process-global configuration store. It lazily reloads when
 // the underlying user config file changes (detected by mtime).
 type Snapshot struct {
-	mu             sync.RWMutex
-	data           map[string]any
-	defaultsPath   string
-	userPath       string
-	defaultsMtime  float64
-	userMtime      float64
+	mu            sync.RWMutex
+	data          map[string]any
+	defaultsPath  string
+	userPath      string
+	defaultsMtime float64
+	userMtime     float64
 }
 
 var global = &Snapshot{}
@@ -40,6 +40,9 @@ func SetPaths(defaultsPath, userPath string) {
 	defer global.mu.Unlock()
 	global.defaultsPath = defaultsPath
 	global.userPath = userPath
+	global.defaultsMtime = -1
+	global.userMtime = -1
+	global.data = nil
 }
 
 // DefaultsPath returns the resolved defaults TOML path.

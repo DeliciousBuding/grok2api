@@ -12,29 +12,29 @@ type Upsert struct {
 
 // Patch mutates an existing account (only set fields are applied).
 type Patch struct {
-	Token            string
-	Pool             *string
-	Status           *Status
-	Tags             []string
-	AddTags          []string
-	RemoveTags       []string
-	QuotaAuto        *map[string]any
-	QuotaFast        *map[string]any
-	QuotaExpert      *map[string]any
-	QuotaHeavy        *map[string]any
-	QuotaGrok43      *map[string]any
-	QuotaConsole     *map[string]any
-	UsageUseDelta    *int
-	UsageFailDelta   *int
-	UsageSyncDelta   *int
-	LastUseAt        *int64
-	LastFailAt       *int64
-	LastFailReason   *string
-	LastSyncAt       *int64
-	LastClearAt      *int64
-	StateReason      *string
-	ExtMerge         map[string]any
-	ClearFailures    bool
+	Token          string
+	Pool           *string
+	Status         *Status
+	Tags           []string
+	AddTags        []string
+	RemoveTags     []string
+	QuotaAuto      *map[string]any
+	QuotaFast      *map[string]any
+	QuotaExpert    *map[string]any
+	QuotaHeavy     *map[string]any
+	QuotaGrok43    *map[string]any
+	QuotaConsole   *map[string]any
+	UsageUseDelta  *int
+	UsageFailDelta *int
+	UsageSyncDelta *int
+	LastUseAt      *int64
+	LastFailAt     *int64
+	LastFailReason *string
+	LastSyncAt     *int64
+	LastClearAt    *int64
+	StateReason    *string
+	ExtMerge       map[string]any
+	ClearFailures  bool
 }
 
 // ListQuery filters and paginates the account list.
@@ -69,11 +69,11 @@ type MutationResult struct {
 
 // ChangeSet is an incremental scan result.
 type ChangeSet struct {
-	Revision     int
-	BatchMaxRev  int
-	Items        []*Record
+	Revision      int
+	BatchMaxRev   int
+	Items         []*Record
 	DeletedTokens []string
-	HasMore      bool
+	HasMore       bool
 }
 
 // Snapshot is the full runtime view.

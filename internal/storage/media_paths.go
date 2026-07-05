@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // MediaType is "image" or "video".

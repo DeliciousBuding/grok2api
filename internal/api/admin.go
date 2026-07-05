@@ -15,12 +15,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/logger"
-	"github.com/aurora-develop/grok2api/internal/platform"
-	"github.com/aurora-develop/grok2api/internal/storage"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/logger"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
 // --- System endpoints ---
@@ -47,7 +47,7 @@ func (s *Server) handleSync(c *gin.Context) {
 		writeAppError(c, platform.NewAppError("directory not initialised", platform.ErrServer, "directory_not_initialised", http.StatusServiceUnavailable))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	changed, err := s.Directory.SyncIfChanged(ctx)
 	if err != nil {
@@ -110,7 +110,7 @@ func validatePatch(patch map[string]any) error {
 // --- Tokens CRUD ---
 
 func (s *Server) handleTokensList(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	page, err := s.Repo.ListAccounts(ctx, account.ListQuery{Page: 1, PageSize: 5000, IncludeDeleted: false})
 	if err != nil {
@@ -201,7 +201,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 			}
 			upserts = append(upserts, account.Upsert{Token: token, Pool: poolName, Tags: account.SortTags(tags)})
 		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 		_, err := s.Repo.ReplacePool(ctx, poolName, upserts)
 		cancel()
 		if err != nil {
@@ -236,7 +236,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		return
 	}
 	tags := account.SortTags(body.Tags)
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 
 	existing, err := s.Repo.GetAccounts(ctx, body.Tokens)
@@ -278,7 +278,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 	if len(newTokens) > 0 && s.Refresh != nil {
 		if autoDetect {
 			go func() {
-				refCtx, refCancel := context.WithTimeout(context.Background(), 120*time.Second)
+				refCtx, refCancel := context.WithTimeout(context.Background(), timeoutClassDuration("admin", 120))
 				defer refCancel()
 				refreshed, failed, err := s.Refresh.RefreshTokens(refCtx, newTokens)
 				if err != nil {
@@ -307,7 +307,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 			}()
 		} else {
 			go func() {
-				refCtx, refCancel := context.WithTimeout(context.Background(), 120*time.Second)
+				refCtx, refCancel := context.WithTimeout(context.Background(), timeoutClassDuration("admin", 120))
 				defer refCancel()
 				_, _, _ = s.Refresh.RefreshTokens(refCtx, newTokens)
 			}()
@@ -341,7 +341,7 @@ func (s *Server) handleTokensDelete(c *gin.Context) {
 		writeAppError(c, platform.ValidationError("No valid tokens provided", "tokens"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 	result, err := s.Repo.DeleteAccounts(ctx, clean)
 	if err != nil {
@@ -352,7 +352,7 @@ func (s *Server) handleTokensDelete(c *gin.Context) {
 }
 
 func (s *Server) handleTokensDeleteInvalid(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 	page, err := s.Repo.ListAccounts(ctx, account.ListQuery{Page: 1, PageSize: 5000, IncludeDeleted: false})
 	if err != nil {
@@ -398,7 +398,7 @@ func (s *Server) handleTokensEdit(c *gin.Context) {
 		writeAppError(c, platform.ValidationError("Missing token", "body"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	recs, err := s.Repo.GetAccounts(ctx, []string{old, newTok})
 	if err != nil {
@@ -451,7 +451,7 @@ func (s *Server) handleTokensToggleDisabled(c *gin.Context) {
 		writeAppError(c, platform.ValidationError("Missing token", "token"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	recs, err := s.Repo.GetAccounts(ctx, []string{token})
 	if err != nil || len(recs) == 0 {
@@ -485,7 +485,7 @@ func (s *Server) handleTokensToggleDisabledBatch(c *gin.Context) {
 		seen[t] = true
 		clean = append(clean, t)
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	recs, err := s.Repo.GetAccounts(ctx, clean)
 	if err != nil || len(recs) == 0 {
@@ -559,7 +559,7 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 		seen[tok] = true
 		upserts = append(upserts, account.Upsert{Token: tok, Pool: pool, Tags: tags})
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 	if _, err := s.Repo.ReplacePool(ctx, pool, upserts); err != nil {
 		writeAppError(c, err)
@@ -640,7 +640,7 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 		writeAppError(c, platform.NewAppError("refresh service not available", platform.ErrServer, "no_refresh", 503))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 300))
 	defer cancel()
 	results := map[string]any{}
 	mu := sync.Mutex{}
@@ -683,7 +683,7 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 		writeAppError(c, platform.NewAppError("refresh service not available", platform.ErrServer, "no_refresh", 503))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 300))
 	defer cancel()
 	results := map[string]any{}
 	mu := sync.Mutex{}
@@ -819,7 +819,7 @@ func extractAssetRows(token string, resp map[string]any, err error) map[string]a
 // --- Assets ---
 
 func (s *Server) handleAssetsList(c *gin.Context) {
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 	page, err := s.Repo.ListAccounts(ctx, account.ListQuery{Page: 1, PageSize: 5000, IncludeDeleted: false})
 	if err != nil {
@@ -868,7 +868,7 @@ func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 		writeAppError(c, platform.ValidationError("Missing token or asset_id", "body"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
 	if _, err := grok.DeleteAsset(ctx, s.Transport, token, body.AssetID); err != nil {
 		writeAppError(c, err)
@@ -890,7 +890,7 @@ func (s *Server) handleAssetsClearToken(c *gin.Context) {
 		writeAppError(c, platform.ValidationError("Missing token", "token"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 	deleted, err := s.clearTokenAssets(ctx, token)
 	if err != nil {

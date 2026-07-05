@@ -8,9 +8,9 @@ type ErrorKind string
 const (
 	ErrValidation     ErrorKind = "invalid_request_error"
 	ErrAuthentication ErrorKind = "authentication_error"
-	ErrRateLimit       ErrorKind = "rate_limit_exceeded"
-	ErrUpstream        ErrorKind = "upstream_error"
-	ErrServer          ErrorKind = "server_error"
+	ErrRateLimit      ErrorKind = "rate_limit_exceeded"
+	ErrUpstream       ErrorKind = "upstream_error"
+	ErrServer         ErrorKind = "server_error"
 )
 
 // AppError is the base error type carried through the request pipeline and

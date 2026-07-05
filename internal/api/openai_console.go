@@ -11,11 +11,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // runConsoleChatWithRetry handles retry + account selection for console chat.
@@ -57,18 +57,25 @@ func (s *Server) runConsoleChatWithRetry(c *gin.Context, req *chatCompletionRequ
 			return
 		}
 		exclude = append(exclude, lease.Token)
+		s.metricsRegistry().IncAttempt("console", req.Model)
 		err := s.runConsoleChatOnce(c.Writer, c.Request, lease, req, temp, topP, effort, stream)
-		s.Directory.Release(lease)
+		if s.Directory != nil {
+			s.Directory.Release(lease)
+		}
 		if err == nil {
+			s.metricsRegistry().IncUpstreamStatus("console", req.Model, http.StatusOK)
 			s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 			return
 		}
+		status := metricStatusCode(err)
+		s.metricsRegistry().IncUpstreamStatus("console", req.Model, status)
 		s.feedbackError(lease.Token, err, lease.ModeID)
 		lastErr = err
-		if !shouldRetryUpstream(err) || attempt == maxRetries {
+		if !shouldRetryAttempt(err, attempt, maxRetries) {
 			writeAppError(c, err)
 			return
 		}
+		s.metricsRegistry().IncRetry("console", req.Model, metricReason(status))
 	}
 	if lastErr != nil {
 		writeAppError(c, lastErr)
@@ -87,11 +94,13 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 		return platform.UpstreamError("encode console payload: "+err.Error(), 500, "")
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	timeout := timeoutClassDuration("console", 300)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
 	bodyReader, err := s.Transport.PostStream(ctx, grok.ConsoleResponses, lease.Token, body,
-		grok.WithConsoleMode())
+		grok.WithConsoleMode(),
+		grok.WithTimeout(timeout))
 	if err != nil {
 		return err
 	}
@@ -159,6 +168,9 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 		}
 	}
 	text := adapter.FullText()
+	if text == "" {
+		s.metricsRegistry().IncEmptyOutput("console", req.Model)
+	}
 	resp := makeChatResponse(completionID, created, req.Model, text, "", false)
 	if adapter.Usage != nil {
 		resp["usage"] = adapter.Usage
@@ -192,6 +204,11 @@ func (s *Server) handleResponses(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+req.Model+"' not found", "model", "model_not_found"))
 		return
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, req.Model)
+	if !ok {
+		return
+	}
+	defer releaseAdmission()
 
 	stream := config.Global().GetBool("features.stream", true)
 	if req.Stream != nil {
@@ -315,6 +332,9 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 	f := false
 	nonStreamReq.Stream = &f
 	text := s.captureChatText(c.Request, &nonStreamReq, spec)
+	if text == "" {
+		s.metricsRegistry().IncEmptyOutput("responses", req.Model)
+	}
 
 	itemID := "msg_" + uuid.NewString()
 	outItem := map[string]any{
@@ -410,7 +430,9 @@ func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, sp
 	if lease == nil {
 		return ""
 	}
-	defer s.Directory.Release(lease)
+	if s.Directory != nil {
+		defer s.Directory.Release(lease)
+	}
 
 	var err error
 	if spec.IsConsoleChat() {
@@ -451,6 +473,9 @@ func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, sp
 // handleResponsesNonStream returns a single response.completed object.
 func (s *Server) handleResponsesNonStream(c *gin.Context, req *chatCompletionRequest, spec *model.Spec) {
 	text := s.captureChatText(c.Request, req, spec)
+	if text == "" {
+		s.metricsRegistry().IncEmptyOutput("responses", req.Model)
+	}
 	responseID := "resp_" + uuid.NewString()
 	itemID := "msg_" + uuid.NewString()
 	resp := map[string]any{

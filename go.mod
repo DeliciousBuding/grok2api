@@ -1,4 +1,4 @@
-module github.com/aurora-develop/grok2api
+module github.com/DeliciousBuding/grok2api
 
 go 1.26.4
 

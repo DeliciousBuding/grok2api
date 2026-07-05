@@ -30,13 +30,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/api"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/logger"
-	"github.com/aurora-develop/grok2api/internal/platform"
-	"github.com/aurora-develop/grok2api/internal/storage"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/api"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/logger"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
 // Project version (overridden at build time via -ldflags).
@@ -88,6 +88,7 @@ func main() {
 
 	// 4. Bootstrap the in-memory account directory from the persistent store.
 	directory := account.NewDirectory(repo)
+	directory.SetMaxInflight(cfg.GetInt("account.selection.max_inflight", 12))
 	if err := directory.Bootstrap(ctx); err != nil {
 		logger.Errorf("account directory bootstrap failed: error=%v", err)
 		os.Exit(1)

@@ -1,0 +1,12 @@
+最后更新：2026-07-06 01:55
+
+# Dependency Graph
+
+```mermaid
+graph TD
+  P1["Phase 1: Safety Baseline"] --> P2["Phase 2: Admission Control"]
+  P1 --> P3["Phase 3: Observability"]
+  P2 --> P4["Phase 4: Upstream Robustness"]
+  P3 --> P4
+  P4 --> P5["Phase 5: Release Hardening"]
+```

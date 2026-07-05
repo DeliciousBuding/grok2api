@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // AssetUploadResult is the response from POST /rest/app-chat/upload-file.

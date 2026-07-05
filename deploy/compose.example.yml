@@ -1,0 +1,56 @@
+services:
+  grok2api:
+    image: ghcr.io/deliciousbuding/grok2api:latest
+    container_name: grok2api
+    restart: unless-stopped
+    pull_policy: always
+    ports:
+      - "${HOST_PORT:-8000}:8000"
+    environment:
+      TZ: "${TZ:-UTC}"
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8000"
+      DATA_DIR: "/app/data"
+      LOG_DIR: "/app/logs"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      LOG_FILE_ENABLED: "${LOG_FILE_ENABLED:-true}"
+      ACCOUNT_LOCAL_PATH: "/app/data/accounts.jsonl"
+      ACCOUNT_SYNC_INTERVAL: "${ACCOUNT_SYNC_INTERVAL:-30}"
+      PROXY_HTTP: "${PROXY_HTTP:-}"
+    volumes:
+      - grok2api-data:/app/data
+      - grok2api-logs:/app/logs
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  grok2api-data:
+  grok2api-logs:

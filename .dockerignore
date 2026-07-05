@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+data
+logs
+dist
+tmp
+*.log
+*.tmp
+*.exe
+*.tar.gz
+.env
+CLAUDE.md
+docs

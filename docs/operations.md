@@ -1,0 +1,105 @@
+最后更新：2026-07-06 03:05
+
+# Operations Runbook
+
+This runbook covers public, single-node operation of `grok2api` with the published GHCR image. Keep real SSO tokens, cookies, account dumps, and private host details outside this repository.
+
+## Release Image
+
+The Docker workflow publishes `ghcr.io/deliciousbuding/grok2api` from the public repository.
+
+- Pull requests build the image without pushing it.
+- Pushes to `main` and `v*` tags publish multi-arch images for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
+- Authentication uses the repository `GITHUB_TOKEN` with `contents: read` and `packages: write`; no custom package PAT is required.
+- Published tags include `latest` for the default branch, the Git ref, the short commit SHA, and the version read from `VERSION`.
+
+## First Deploy
+
+```bash
+mkdir -p grok2api
+cd grok2api
+curl -fsSLO https://raw.githubusercontent.com/DeliciousBuding/grok2api/main/deploy/compose.example.yml
+cp compose.example.yml compose.yml
+docker compose pull
+docker compose up -d
+```
+
+The sample Compose file creates named volumes for `/app/data` and `/app/logs`. Put runtime configuration in `/app/data/config.toml` through the mounted data volume, not in the image.
+
+## Health Checks
+
+```bash
+docker compose ps
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS http://127.0.0.1:8000/ready
+curl -fsS http://127.0.0.1:8000/metrics
+```
+
+Expected behavior:
+
+- `/health` returns HTTP 200 when the process is serving.
+- `/ready` reports account-pool readiness and observed upstream degradation.
+- `/metrics` exposes aggregate counters and gauges without token values.
+
+## Capacity Controls
+
+Tune these before exposing the service to untrusted clients:
+
+```toml
+[server]
+max_body_bytes = 10485760
+
+[admission]
+global_max_inflight = 64
+per_model_max_inflight = 16
+
+[account.selection]
+max_inflight = 8
+
+[retry]
+max_retries = 1
+```
+
+Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
+
+## Updates
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+curl -fsS http://127.0.0.1:8000/ready
+```
+
+For controlled rollouts, pin the image tag in `compose.yml` to a version or short SHA instead of `latest`.
+
+## Backup
+
+Back up the data volume before upgrades or bulk token changes.
+
+```bash
+docker run --rm \
+  -v grok2api-data:/data:ro \
+  -v "$PWD:/backup" \
+  alpine:3.21 \
+  tar czf /backup/grok2api-data-backup.tgz -C /data .
+```
+
+The important runtime files are account storage, user config, and local media cache under `/app/data`.
+
+## Rollback
+
+1. Pin the previous known-good image tag in `compose.yml`.
+2. Run `docker compose pull && docker compose up -d`.
+3. Check `/health`, `/ready`, and `/metrics`.
+4. Restore the data-volume backup only if the runtime data itself was changed incorrectly.
+
+## Troubleshooting
+
+| Symptom | Check | Likely Action |
+|---|---|---|
+| Container restarts immediately | `docker compose logs --tail=100 grok2api` | Check `/app/data/config.toml` syntax and data volume permissions. |
+| `/ready` is not ready | `curl -fsS http://127.0.0.1:8000/ready` | Add valid accounts or inspect upstream status metrics. |
+| Many 429 responses | `/metrics` admission counters | Increase account pool capacity or lower client concurrency. |
+| Upstream 403 responses | upstream status metrics and clearance config | Refresh browser cookies and verify proxy egress consistency. |
+| Disk growth | `docker system df`, log volume size | Rotate logs, back up data, and remove old images deliberately. |

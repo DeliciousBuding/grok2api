@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	tlsclient "github.com/aurora-develop/grok2api/internal/tlsclient"
+	tlsclient "github.com/DeliciousBuding/grok2api/internal/tlsclient"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // Transport is the HTTP client for upstream Grok requests.  It uses

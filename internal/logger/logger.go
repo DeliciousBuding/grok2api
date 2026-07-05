@@ -197,7 +197,7 @@ func (l *Logger) Errorf(format string, args ...any) { l.logf(LevelError, format,
 func (l *Logger) Debug(args ...any) { l.logf(LevelDebug, "%s", fmt.Sprint(args...)) }
 func (l *Logger) Info(args ...any)  { l.logf(LevelInfo, "%s", fmt.Sprint(args...)) }
 func (l *Logger) Warn(args ...any)  { l.logf(LevelWarn, "%s", fmt.Sprint(args...)) }
-func (l *Logger) Error(args ...any)  { l.logf(LevelError, "%s", fmt.Sprint(args...)) }
+func (l *Logger) Error(args ...any) { l.logf(LevelError, "%s", fmt.Sprint(args...)) }
 
 // Package-level convenience functions using the default logger.
 func Debugf(format string, args ...any) { defaultLogger.Debugf(format, args...) }

@@ -114,6 +114,21 @@ When `reasoning_effort` is enabled, thinking tokens appear as:
 
 On upstream failure (429, 401, 503), the gateway automatically retries with a different account. Max retries: `retry.max_retries` (default 1) for quota strategy, 5 for random strategy.
 
+#### Admission Control
+
+When `admission.global_max_inflight` or `admission.per_model_max_inflight` is exhausted, the gateway rejects the request with HTTP 429 before selecting an upstream account.
+
+```json
+{
+  "error": {
+    "message": "Admission control exhausted",
+    "type": "rate_limit_error",
+    "code": "admission_control_exhausted",
+    "scope": "model:grok-4.20-fast"
+  }
+}
+```
+
 ---
 
 ## Responses API (OpenAI-compatible)
@@ -396,10 +411,48 @@ Get a single model by ID.
 {"status": "ok"}
 ```
 
+### `GET /ready`
+
+Readiness endpoint for load balancers and orchestrators. It returns process, account-pool, and observed-upstream states without exposing tokens.
+
+When no active accounts are loaded, it returns HTTP 503:
+
+```json
+{
+  "status": "not_ready",
+  "checks": {
+    "process": {"status": "ok"},
+    "account_pool": {"status": "not_ready", "total": 0, "active": 0, "inflight": 0},
+    "upstream": {"status": "unknown"}
+  }
+}
+```
+
+With at least one active account, it returns HTTP 200 and `status: "ready"` unless observed upstream error counters outweigh successful observations.
+
 ### `GET /meta`
 
 ```json
 {"version": "1.0.0"}
+```
+
+### `GET /metrics`
+
+Prometheus text-format metrics. The endpoint exposes aggregate process, account-pool, admission, and operational counters only; it must not include raw SSO tokens or API keys.
+
+Current baseline metrics:
+
+```text
+grok2api_build_info{version="1.0.0"} 1
+grok2api_accounts_total 0
+grok2api_accounts_active 0
+grok2api_account_inflight 0
+grok2api_admission_inflight 0
+grok2api_attempts_total{model="grok-4.20-fast",surface="chat"} 1
+grok2api_retries_total{model="grok-4.20-fast",reason="429",surface="chat"} 1
+grok2api_upstream_responses_total{model="grok-4.20-fast",status="429",surface="chat"} 1
+grok2api_account_feedback_total{kind="rate_limited"} 1
+grok2api_empty_outputs_total{model="grok-4.20-fast",surface="responses"} 1
 ```
 
 ### `GET /v1/files/image?id=<file_id>`
@@ -623,6 +676,6 @@ All errors follow this format:
 |---|---|---|
 | `validation_error` | 400 | Invalid model, missing required fields, bad JSON |
 | `authentication_error` | 401 | Missing or invalid API key |
-| `rate_limit_error` | 429 | No available accounts, all quotas exhausted |
+| `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |
 | `upstream_error` | 502 | Grok upstream returned an error |
 | `server_error` | 500 | Internal server error |
