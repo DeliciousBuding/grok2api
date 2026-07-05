@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 03:32
 
 # Project Overview
 
@@ -23,7 +23,7 @@
 
 ## Baseline Verification
 
-Before changes, `go test ./...` passed with only `internal/grok/statsig` tests. The fork adds regression tests for account concurrency, retry clamping, config path reload, body-size admission, admission control, readiness, public-safe metrics, parser boundaries, timeout classes, stream idle timeouts, request-duration histograms, and retry budgets. Release validation also covers Docker build, Compose config expansion, workflow linting, image metadata, and a dependency-free load smoke command.
+Before changes, `go test ./...` passed with only `internal/grok/statsig` tests. The fork adds regression tests for account concurrency, retry clamping, config path reload, body-size admission, admission control, readiness, public-safe metrics, parser boundaries, timeout classes, stream idle timeouts, request-duration histograms, retry budgets, and admin API validation. Release validation also covers Docker build, Compose config expansion, workflow linting, image metadata, and a dependency-free load smoke command.
 
 ## S.U.P.E.R Snapshot
 

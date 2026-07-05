@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -313,6 +314,160 @@ func TestVideoAdmissionReleasesWhenBackgroundJobFails(t *testing.T) {
 	}
 }
 
+func TestAdminTokensListUsesBoundedPagination(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	repo := &snapshotRepo{listPage: &account.Page{
+		Items:      []*account.Record{account.NewRecord("tok-a"), account.NewRecord("tok-b")},
+		Total:      5,
+		Page:       2,
+		PageSize:   2,
+		TotalPages: 3,
+		Revision:   9,
+	}}
+	server := NewServer(repo, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/tokens?page=2&page_size=2", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if repo.lastListQuery.Page != 2 || repo.lastListQuery.PageSize != 2 {
+		t.Fatalf("expected page query to reach repository, got %+v", repo.lastListQuery)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	pagination, ok := body["pagination"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected pagination metadata, got %s", w.Body.String())
+	}
+	if pagination["page"].(float64) != 2 || pagination["page_size"].(float64) != 2 ||
+		pagination["total"].(float64) != 5 || pagination["total_pages"].(float64) != 3 ||
+		pagination["has_more"].(bool) != true {
+		t.Fatalf("unexpected pagination metadata: %#v", pagination)
+	}
+}
+
+func TestAdminTokensListAppliesFilters(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	repo := &snapshotRepo{listPage: &account.Page{}}
+	server := NewServer(repo, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/tokens?pool=super&status=disabled", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if repo.lastListQuery.Page != 1 || repo.lastListQuery.PageSize != adminDefaultPageSize {
+		t.Fatalf("expected default pagination, got %+v", repo.lastListQuery)
+	}
+	if repo.lastListQuery.Pool != "super" {
+		t.Fatalf("expected pool filter super, got %+v", repo.lastListQuery)
+	}
+	if repo.lastListQuery.Status == nil || *repo.lastListQuery.Status != account.StatusDisabled {
+		t.Fatalf("expected disabled status filter, got %+v", repo.lastListQuery.Status)
+	}
+	if repo.lastListQuery.IncludeDeleted {
+		t.Fatal("expected token list to exclude deleted accounts")
+	}
+}
+
+func TestAdminTokensListRejectsOversizedPage(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/tokens?page_size=1001", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_page_size") {
+		t.Fatalf("expected invalid_page_size error, got %s", w.Body.String())
+	}
+}
+
+func TestAdminTokensListRejectsInvalidQueryValues(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name string
+		path string
+		code string
+	}{
+		{name: "page", path: "/admin/api/tokens?page=0", code: "invalid_page"},
+		{name: "pool", path: "/admin/api/tokens?pool=unknown", code: "invalid_pool"},
+		{name: "status", path: "/admin/api/tokens?status=deleted", code: "invalid_status"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer admin")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestAdminTokensReplaceRejectsInvalidPool(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/tokens", strings.NewReader(`{"unknown":["tok-a"]}`))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_pool") {
+		t.Fatalf("expected invalid_pool error, got %s", w.Body.String())
+	}
+}
+
+func TestAdminTokensReplaceRejectsMalformedPoolPayload(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/tokens", strings.NewReader(`{"basic":{"token":"tok-a"}}`))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_pool_payload") {
+		t.Fatalf("expected invalid_pool_payload error, got %s", w.Body.String())
+	}
+}
+
 func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
 	t.Helper()
 	body := &bytes.Buffer{}
@@ -329,7 +484,9 @@ func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, s
 }
 
 type snapshotRepo struct {
-	items []*account.Record
+	items         []*account.Record
+	listPage      *account.Page
+	lastListQuery account.ListQuery
 }
 
 func (r *snapshotRepo) Initialize(ctx context.Context) error { return nil }
@@ -355,6 +512,10 @@ func (r *snapshotRepo) GetAccounts(ctx context.Context, tokens []string) ([]*acc
 	return nil, nil
 }
 func (r *snapshotRepo) ListAccounts(ctx context.Context, query account.ListQuery) (*account.Page, error) {
+	r.lastListQuery = query
+	if r.listPage != nil {
+		return r.listPage, nil
+	}
 	return &account.Page{}, nil
 }
 func (r *snapshotRepo) ReplacePool(ctx context.Context, pool string, upserts []account.Upsert) (*account.MutationResult, error) {

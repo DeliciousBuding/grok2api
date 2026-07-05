@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 03:32
 
 # Milestones
 
@@ -10,3 +10,4 @@
 | Upstream Robustness | Timeout and parser boundaries protect streaming and media flows. |
 | Release Hardening | Public Docker build, sample deployment, and runbook are ready. |
 | Runtime Resilience | Latency histograms, stream idle timeout, and load smoke tooling are verified. |
+| Admin API Validation | Token listing is paginated and invalid admin payloads fail with predictable errors. |

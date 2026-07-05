@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 03:32
 
 # Risk Assessment
 
@@ -31,10 +31,12 @@
 - Request-duration histograms expose route-pattern latency without token or path-parameter leakage.
 - Streaming chat and console paths enforce a configurable upstream idle timeout.
 - `cmd/load-smoke` provides a dependency-free load gate with error-rate and p95 thresholds.
+- Admin token listing now has bounded pagination, query validation, and pagination metadata.
+- Admin pool replacement rejects invalid pool names and malformed pool payloads instead of silently ignoring them.
 
 ## Remaining Risks
 
 - External dashboards and alert rules are still deployment-specific.
 - Chaos/failure simulation beyond load smoke is still future work.
-- Admin APIs need more validation and pagination tests.
+- Some lower-traffic admin batch/cache endpoints still need deeper negative-case tests.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.

@@ -495,6 +495,37 @@ All admin endpoints require `app.app_key` authentication via `Authorization: Bea
 | `POST` | `/admin/api/tokens/disabled` | Toggle disabled state |
 | `POST` | `/admin/api/tokens/disabled/batch` | Batch toggle disabled |
 
+#### `GET /admin/api/tokens`
+
+Lists account records with bounded pagination.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `page` | `1` | — | Positive page number |
+| `page_size` | `50` | `1000` | Positive page size; larger values return `invalid_page_size` |
+| `pool` | — | — | Optional `basic`, `super`, or `heavy` filter |
+| `status` | — | — | Optional `active`, `cooling`, `expired`, or `disabled` filter |
+
+Response shape:
+
+```json
+{
+  "tokens": [],
+  "pagination": {
+    "page": 1,
+    "page_size": 50,
+    "total": 0,
+    "total_pages": 1,
+    "has_more": false,
+    "revision": 1
+  }
+}
+```
+
+#### `POST /admin/api/tokens`
+
+Replaces all tokens in one or more pools. Pool names must be valid and each pool value must be an array; invalid pools or malformed pool payloads return HTTP 400 instead of being silently ignored.
+
 ### Pool & Batch Operations
 
 | Method | Path | Description |

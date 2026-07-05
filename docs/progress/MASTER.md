@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 03:32
 
 # Progress Master
 
@@ -18,6 +18,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - [x] Phase 4: Upstream Robustness (3/3 tasks) — #4
 - [x] Phase 5: Release Hardening (4/4 tasks) — #5
 - [x] Phase 6: Runtime Resilience (4/4 tasks) — #6
+- [x] Phase 7: Admin API Validation (4/4 tasks) — #7
 
 ## GitHub Tracking
 
@@ -27,6 +28,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 4 issue: https://github.com/DeliciousBuding/grok2api/issues/4
 - Phase 5 issue: https://github.com/DeliciousBuding/grok2api/issues/5
 - Phase 6 issue: https://github.com/DeliciousBuding/grok2api/issues/6
+- Phase 7 issue: https://github.com/DeliciousBuding/grok2api/issues/7
 
 ## Verification
 
@@ -54,6 +56,8 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - `docker compose -f deploy/compose.example.yml config` passed during Phase 6 runtime resilience.
 - `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 6 runtime resilience.
 - Local `go run ./cmd/load-smoke -base-url http://127.0.0.1:18080 -path /health -concurrency 4 -duration 1s -max-error-rate 0 -max-p95-ms 1000` passed against a temporary local process.
+- `go test -count=1 ./internal/api -run "TestAdminTokensList|TestAdminTokensReplace"` passed during Phase 7 admin validation.
+- `go test -count=1 ./...` passed during Phase 7 admin validation.
 
 ## Governance
 
@@ -70,3 +74,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 4 actual effort: medium. S.U.P.E.R score remains high with improved upstream boundary controls. Unplanned dependency count: 1 (admin endpoints also needed timeout-class coverage).
 - Phase 5 actual effort: medium. S.U.P.E.R score improved to high for environment-agnostic release surfaces. Unplanned dependency count: 2 (Docker image was missing `config.defaults.toml`; Compose rejected combined pids/resource limits).
 - Phase 6 actual effort: medium. S.U.P.E.R score improved to high for runtime observability and resilience. Unplanned dependency count: 1 (`cmd/load-smoke` initially counted duration-cancelled in-flight requests as failures; fixed by separating stop-new-work from per-request timeout).
+- Phase 7 actual effort: medium. S.U.P.E.R score improved to high for admin API ports and validation boundaries. Unplanned dependency count: 1 (lower-traffic admin batch/cache endpoints remain a separate hardening lane).

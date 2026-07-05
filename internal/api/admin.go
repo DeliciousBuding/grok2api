@@ -109,10 +109,20 @@ func validatePatch(patch map[string]any) error {
 
 // --- Tokens CRUD ---
 
+const (
+	adminDefaultPageSize = 50
+	adminMaxPageSize     = 1000
+)
+
 func (s *Server) handleTokensList(c *gin.Context) {
+	query, err := parseAdminListQuery(c)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
-	page, err := s.Repo.ListAccounts(ctx, account.ListQuery{Page: 1, PageSize: 5000, IncludeDeleted: false})
+	page, err := s.Repo.ListAccounts(ctx, query)
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -121,7 +131,64 @@ func (s *Server) handleTokensList(c *gin.Context) {
 	for _, rec := range page.Items {
 		out = append(out, serializeRecord(rec))
 	}
-	c.JSON(http.StatusOK, gin.H{"tokens": out})
+	c.JSON(http.StatusOK, gin.H{
+		"tokens": out,
+		"pagination": gin.H{
+			"page":        page.Page,
+			"page_size":   page.PageSize,
+			"total":       page.Total,
+			"total_pages": page.TotalPages,
+			"has_more":    page.Page < page.TotalPages,
+			"revision":    page.Revision,
+		},
+	})
+}
+
+func parseAdminListQuery(c *gin.Context) (account.ListQuery, error) {
+	page, err := parsePositiveQueryInt(c, "page", 1)
+	if err != nil {
+		return account.ListQuery{}, err
+	}
+	pageSize, err := parsePositiveQueryInt(c, "page_size", adminDefaultPageSize)
+	if err != nil {
+		return account.ListQuery{}, err
+	}
+	if pageSize > adminMaxPageSize {
+		return account.ListQuery{}, platform.ValidationErrorCode(
+			fmt.Sprintf("page_size must be <= %d", adminMaxPageSize),
+			"page_size",
+			"invalid_page_size",
+		)
+	}
+	q := account.ListQuery{Page: page, PageSize: pageSize, IncludeDeleted: false}
+	if pool := strings.TrimSpace(c.Query("pool")); pool != "" {
+		if _, ok := account.PoolFromName(pool); !ok {
+			return account.ListQuery{}, platform.ValidationErrorCode("Invalid pool '"+pool+"'", "pool", "invalid_pool")
+		}
+		q.Pool = pool
+	}
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		st := account.Status(status)
+		switch st {
+		case account.StatusActive, account.StatusCooling, account.StatusExpired, account.StatusDisabled:
+			q.Status = &st
+		default:
+			return account.ListQuery{}, platform.ValidationErrorCode("Invalid status '"+status+"'", "status", "invalid_status")
+		}
+	}
+	return q, nil
+}
+
+func parsePositiveQueryInt(c *gin.Context, key string, def int) (int, error) {
+	raw := strings.TrimSpace(c.Query(key))
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		return 0, platform.ValidationErrorCode(key+" must be a positive integer", key, "invalid_"+key)
+	}
+	return n, nil
 }
 
 func serializeRecord(rec *account.Record) map[string]any {
@@ -169,13 +236,19 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 	total := 0
 	for poolName, items := range body {
 		if poolName == "" {
-			continue
+			writeAppError(c, platform.ValidationErrorCode("Pool name is required", "pool", "invalid_pool"))
+			return
 		}
 		_, ok := account.PoolFromName(poolName)
 		if !ok {
-			continue
+			writeAppError(c, platform.ValidationErrorCode("Invalid pool '"+poolName+"'", "pool", "invalid_pool"))
+			return
 		}
 		tokenList, _ := items.([]any)
+		if tokenList == nil {
+			writeAppError(c, platform.ValidationErrorCode("Pool '"+poolName+"' must be an array", poolName, "invalid_pool_payload"))
+			return
+		}
 		upserts := []account.Upsert{}
 		for _, item := range tokenList {
 			var token string

@@ -287,6 +287,10 @@ curl http://localhost:8000/admin/api/status \
 curl http://localhost:8000/admin/api/tokens \
   -H "Authorization: Bearer grok2api"
 
+# 分页查看 Token（默认 page_size=50，最大 1000）
+curl "http://localhost:8000/admin/api/tokens?page=1&page_size=50" \
+  -H "Authorization: Bearer grok2api"
+
 # 更新配置
 curl -X POST http://localhost:8000/admin/api/config \
   -H "Authorization: Bearer grok2api" \

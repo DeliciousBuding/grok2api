@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 03:32
 
 # Task Breakdown
 
@@ -42,3 +42,10 @@
 - [x] Add configurable upstream stream idle timeout for long-lived SSE paths.
 - [x] Add dependency-free load smoke command with error-rate and p95 thresholds.
 - [x] Run full verification and update PR/GitHub tracking.
+
+## Phase 7: Admin API Validation
+
+- [x] Add bounded pagination, filters, and metadata to `GET /admin/api/tokens`.
+- [x] Reject invalid admin list query values with structured 400 responses.
+- [x] Reject invalid pool replacement names and malformed pool payloads.
+- [x] Add focused admin API regression tests and public API documentation.
