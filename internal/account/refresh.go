@@ -188,6 +188,9 @@ func (s *RefreshService) listScheduledRecords(ctx context.Context, pool string, 
 
 // RefreshOnDemand is a throttled full refresh (called after a 429 in quota mode).
 func (s *RefreshService) RefreshOnDemand(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.onDemandMu.Lock()
 	if time.Since(s.lastOnDemand) < s.minOnDemandDelta {
 		s.onDemandMu.Unlock()

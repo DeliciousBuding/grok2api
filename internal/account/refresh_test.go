@@ -203,6 +203,26 @@ func TestRefreshScheduledStopsAfterContextCancellation(t *testing.T) {
 	}
 }
 
+func TestRefreshOnDemandCanceledContextDoesNotConsumeThrottleWindow(t *testing.T) {
+	repo := newScheduledRefreshRepo(1)
+	fetcher := &countingQuotaFetcher{}
+	service := NewRefreshService(repo, fetcher)
+	service.minOnDemandDelta = time.Hour
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := service.RefreshOnDemand(ctx); err == nil {
+		t.Fatal("expected canceled on-demand refresh to return context error")
+	}
+
+	if err := service.RefreshOnDemand(context.Background()); err != nil {
+		t.Fatalf("expected next on-demand refresh to run: %v", err)
+	}
+	if got := fetcher.callCount(); got != 1 {
+		t.Fatalf("expected canceled refresh not to consume throttle window, got %d upstream calls", got)
+	}
+}
+
 type blockingQuotaFetcher struct {
 	mu      sync.Mutex
 	calls   int
