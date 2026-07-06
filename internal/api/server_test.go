@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -11,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -731,12 +733,36 @@ func TestFetchImageBase64RejectsNonSuccessStatus(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	_, err := fetchImageBase64(upstream.URL + "/missing.png")
+	_, err := fetchImageBase64(context.Background(), upstream.URL+"/missing.png")
 	if err == nil {
 		t.Fatal("expected non-success image response to fail")
 	}
 	if !strings.Contains(err.Error(), "image fetch returned 404") {
 		t.Fatalf("expected status error, got %v", err)
+	}
+}
+
+func TestFetchImageBase64HonorsCanceledContext(t *testing.T) {
+	loadTestConfig(t, "")
+	var requests int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		_, _ = w.Write([]byte("not reached"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := fetchImageBase64(ctx, upstream.URL+"/image.png")
+	if err == nil {
+		t.Fatal("expected canceled context to fail")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %T %[1]v", err)
+	}
+	if got := atomic.LoadInt32(&requests); got != 0 {
+		t.Fatalf("expected canceled context to prevent request, got %d requests", got)
 	}
 }
 
@@ -748,7 +774,7 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	}))
 	t.Cleanup(upstream.Close)
 
-	_, err := fetchImageBase64(upstream.URL + "/image.png")
+	_, err := fetchImageBase64(context.Background(), upstream.URL+"/image.png")
 	if err == nil {
 		t.Fatal("expected oversized fetched image to fail")
 	}
