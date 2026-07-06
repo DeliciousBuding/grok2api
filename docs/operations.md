@@ -137,7 +137,7 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 `asset.max_inline_image_bytes` caps each multipart source image submitted to the image-edit endpoint. Oversized files return `image_file_too_large` instead of being truncated.
 
-`asset.max_fetch_image_bytes` caps image bytes downloaded for `response_format=b64_json`. These downloads inherit the client request context, so client cancellation stops the outbound fetch. Non-2xx image responses and oversized images fail instead of returning encoded error pages or truncated images.
+`asset.max_fetch_image_bytes` caps image bytes downloaded for `response_format=b64_json`. These downloads inherit the client request context, so client cancellation stops the outbound fetch. Non-2xx image responses and oversized images fail instead of returning encoded error pages or truncated images. When a client explicitly asks for `b64_json`, fetch failures return `upstream_error` instead of silently falling back to URL output.
 
 `asset.fetch_image_timeout_sec` caps each remote image download for `response_format=b64_json`. Values less than or equal to zero use the built-in 30 second safety default.
 
