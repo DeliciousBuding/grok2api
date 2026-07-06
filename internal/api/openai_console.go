@@ -69,7 +69,9 @@ func (s *Server) runConsoleChatWithRetry(c *gin.Context, req *chatCompletionRequ
 			return
 		}
 		status := metricStatusCode(err)
-		s.metricsRegistry().IncUpstreamStatus("console", req.Model, status)
+		if shouldRecordUpstreamStatus(err) {
+			s.metricsRegistry().IncUpstreamStatus("console", req.Model, status)
+		}
 		s.feedbackError(lease.Token, err, lease.ModeID)
 		lastErr = err
 		if !shouldRetryAttempt(err, attempt, maxRetries) {

@@ -813,6 +813,20 @@ func TestFeedbackErrorSkipsLocalCancellation(t *testing.T) {
 	}
 }
 
+func TestShouldRecordUpstreamStatusSkipsLocalCancellation(t *testing.T) {
+	for _, err := range []error{context.Canceled, context.DeadlineExceeded} {
+		if shouldRecordUpstreamStatus(err) {
+			t.Fatalf("expected %v not to be recorded as an upstream response", err)
+		}
+	}
+	if !shouldRecordUpstreamStatus(platform.UpstreamError("rate limited", http.StatusTooManyRequests, "")) {
+		t.Fatal("expected upstream app errors to be recorded")
+	}
+	if !shouldRecordUpstreamStatus(errors.New("dial timeout")) {
+		t.Fatal("expected non-cancellation transport errors to be recorded")
+	}
+}
+
 type apiBlockingQuotaFetcher struct {
 	started chan string
 	release chan struct{}

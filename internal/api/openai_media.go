@@ -380,7 +380,9 @@ func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, s
 	s.metricsRegistry().IncAttempt("image", req.Model)
 	err := s.runGrokChatOnce(cw, r, lease, spec, message, fileInputs, temp, topP, emitThink, false, req.Model)
 	if err != nil {
-		s.metricsRegistry().IncUpstreamStatus("image", req.Model, metricStatusCode(err))
+		if shouldRecordUpstreamStatus(err) {
+			s.metricsRegistry().IncUpstreamStatus("image", req.Model, metricStatusCode(err))
+		}
 		return nil
 	}
 	s.metricsRegistry().IncUpstreamStatus("image", req.Model, http.StatusOK)
@@ -759,7 +761,9 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		grok.WithTimeout(timeout),
 		grok.WithReferer("https://grok.com/imagine"))
 	if err != nil {
-		s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
+		if shouldRecordUpstreamStatus(err) {
+			s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
+		}
 		s.failVideoJob(job, "video upstream: "+err.Error())
 		return
 	}

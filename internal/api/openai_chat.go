@@ -153,7 +153,9 @@ func (s *Server) runGrokChatWithRetry(c *gin.Context, req *chatCompletionRequest
 			return
 		}
 		status := metricStatusCode(err)
-		s.metricsRegistry().IncUpstreamStatus("chat", req.Model, status)
+		if shouldRecordUpstreamStatus(err) {
+			s.metricsRegistry().IncUpstreamStatus("chat", req.Model, status)
+		}
 		s.feedbackError(lease.Token, err, lease.ModeID)
 		lastErr = err
 		if !shouldRetryAttempt(err, attempt, maxRetries) {

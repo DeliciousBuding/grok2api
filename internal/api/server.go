@@ -399,6 +399,10 @@ func metricStatusCode(err error) int {
 	return http.StatusInternalServerError
 }
 
+func shouldRecordUpstreamStatus(err error) bool {
+	return !isLocalCancellation(err)
+}
+
 func metricReason(status int) string {
 	return strconv.Itoa(status)
 }
