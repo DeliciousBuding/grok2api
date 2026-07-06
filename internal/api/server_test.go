@@ -18,6 +18,7 @@ import (
 
 	"github.com/DeliciousBuding/grok2api/internal/account"
 	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 func TestRequestSizeMiddlewareRejectsOversizedBody(t *testing.T) {
@@ -852,6 +853,28 @@ func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&maxSeen); got > 1 {
 		t.Fatalf("expected at most 1 concurrent upstream fetch, saw %d", got)
+	}
+}
+
+func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
+	loadTestConfig(t, "")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
+		{url: upstream.URL + "/missing.png"},
+	})
+	if err == nil {
+		t.Fatal("expected b64_json image fetch failure to return an error")
+	}
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected AppError, got %T %[1]v", err)
+	}
+	if appErr.Status != http.StatusBadGateway || appErr.Code != "upstream_error" {
+		t.Fatalf("expected 502 upstream_error, got status=%d code=%s", appErr.Status, appErr.Code)
 	}
 }
 

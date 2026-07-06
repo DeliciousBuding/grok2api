@@ -137,17 +137,14 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 	prompt := "Drawing: " + req.Prompt
 	imageURLs := s.captureLiteImageBatch(c.Request, spec, prompt, n)
 
-	out := []map[string]any{}
+	images := make([]generatedImage, 0, len(imageURLs))
 	for i := 0; i < n && i < len(imageURLs); i++ {
-		url := imageURLs[i]
-		if responseFormat == "b64_json" {
-			b64, err := fetchImageBase64(c.Request.Context(), url)
-			if err == nil {
-				out = append(out, map[string]any{"b64_json": b64})
-				continue
-			}
-		}
-		out = append(out, map[string]any{"url": url})
+		images = append(images, generatedImage{url: imageURLs[i]})
+	}
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	if err != nil {
+		writeAppError(c, err)
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"created": time.Now().Unix(),
@@ -189,11 +186,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	s.metricsRegistry().IncAttempt("image_ws", spec.ModelName)
 	events := stream.StreamImages(c.Request.Context(), prompt, aspectRatio, n, enableNSFW, enablePro)
 
-	type collectedImage struct {
-		url  string
-		blob string
-	}
-	var images []collectedImage
+	var images []generatedImage
 	for ev := range events {
 		switch ev.Type {
 		case grok.ImagineEventImage:
@@ -201,7 +194,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			if ev.URL != "" {
 				url = grok.ImageBaseURL + strings.TrimPrefix(ev.URL, "/")
 			}
-			images = append(images, collectedImage{url: url, blob: ev.Blob})
+			images = append(images, generatedImage{url: url, blob: ev.Blob})
 		case grok.ImagineEventError:
 			s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
 			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
@@ -210,23 +203,13 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	}
 	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
 
-	out := []map[string]any{}
-	for i := 0; i < n && i < len(images); i++ {
-		img := images[i]
-		if responseFormat == "b64_json" {
-			if img.blob != "" {
-				out = append(out, map[string]any{"b64_json": img.blob})
-			} else if img.url != "" {
-				b64, err := fetchImageBase64(c.Request.Context(), img.url)
-				if err == nil {
-					out = append(out, map[string]any{"b64_json": b64})
-					continue
-				}
-				out = append(out, map[string]any{"url": img.url})
-			}
-		} else {
-			out = append(out, map[string]any{"url": img.url})
-		}
+	if n < len(images) {
+		images = images[:n]
+	}
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	if err != nil {
+		writeAppError(c, err)
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
 }
@@ -298,18 +281,44 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 	streamOff := false
 	chatReq.Stream = &streamOff
 	imageURLs := s.captureImageURLs(c.Request, chatReq, spec)
-	out := []map[string]any{}
+	images := make([]generatedImage, 0, len(imageURLs))
 	for _, url := range imageURLs {
-		if responseFormat == "b64_json" {
-			b64, err := fetchImageBase64(c.Request.Context(), url)
-			if err == nil {
-				out = append(out, map[string]any{"b64_json": b64})
-				continue
-			}
-		}
-		out = append(out, map[string]any{"url": url})
+		images = append(images, generatedImage{url: url})
+	}
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	if err != nil {
+		writeAppError(c, err)
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
+}
+
+type generatedImage struct {
+	url  string
+	blob string
+}
+
+func renderGeneratedImages(ctx context.Context, responseFormat string, images []generatedImage) ([]map[string]any, error) {
+	out := make([]map[string]any, 0, len(images))
+	for _, img := range images {
+		if responseFormat == "b64_json" {
+			if img.blob != "" {
+				out = append(out, map[string]any{"b64_json": img.blob})
+				continue
+			}
+			if img.url == "" {
+				continue
+			}
+			b64, err := fetchImageBase64(ctx, img.url)
+			if err != nil {
+				return nil, platform.UpstreamError("image fetch failed: "+err.Error(), http.StatusBadGateway, "")
+			}
+			out = append(out, map[string]any{"b64_json": b64})
+			continue
+		}
+		out = append(out, map[string]any{"url": img.url})
+	}
+	return out, nil
 }
 
 func readImageEditFileBytes(r io.Reader) ([]byte, error) {
