@@ -163,6 +163,8 @@ Admin token imports start quota refresh work through a small bounded background 
 
 Successful request feedback also uses the same small bounded background task gate before starting asynchronous quota refresh. If the gate is saturated, the request feedback still updates the in-memory account state and skips the detached refresh instead of spawning unbounded goroutines.
 
+Unauthorized failure feedback persists account-failure state with a bounded 5 second repository deadline, so a slow account backend cannot hold the request path indefinitely.
+
 `GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
 
 Use account tags for soft workload routing. Add tags through the admin token APIs, then send `grok2api_prefer_tags` on `/v1/chat/completions` or `/v1/responses` requests. The selector prefers accounts that contain all requested tags, but falls back to the normal candidate set when none are available; use separate API keys, admission limits, or deployments when strict tenant isolation is required.

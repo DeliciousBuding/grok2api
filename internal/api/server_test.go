@@ -763,6 +763,22 @@ func TestFeedbackBoundsAsyncQuotaRefreshTasks(t *testing.T) {
 	}
 }
 
+func TestFeedbackErrorPersistsFailureWithDeadline(t *testing.T) {
+	repo := &deadlineCheckingRepo{called: make(chan struct{})}
+	server := NewServer(repo, account.NewDirectory(nil), account.NewRefreshService(repo, nil), nil, nil)
+
+	server.feedbackError("tok-a", platform.NewAppError("unauthorized", platform.ErrUpstream, "unauthorized", http.StatusUnauthorized), 1)
+
+	select {
+	case <-repo.called:
+	case <-time.After(time.Second):
+		t.Fatal("expected feedbackError to persist unauthorized failure")
+	}
+	if !repo.hadDeadline {
+		t.Fatal("expected feedbackError RecordFailure context to include a deadline")
+	}
+}
+
 type apiBlockingQuotaFetcher struct {
 	started chan string
 	release chan struct{}
@@ -782,6 +798,18 @@ func (f *apiBlockingQuotaFetcher) FetchAllQuotas(ctx context.Context, token, poo
 
 func (f *apiBlockingQuotaFetcher) FetchModeQuota(ctx context.Context, token, pool string, modeID int) (*account.ModeQuota, error) {
 	return &account.ModeQuota{Remaining: 29, Total: 30, WindowSec: account.BasicFastWindowSec}, nil
+}
+
+type deadlineCheckingRepo struct {
+	snapshotRepo
+	called      chan struct{}
+	hadDeadline bool
+}
+
+func (r *deadlineCheckingRepo) PatchAccounts(ctx context.Context, patches []account.Patch) (*account.MutationResult, error) {
+	_, r.hadDeadline = ctx.Deadline()
+	close(r.called)
+	return &account.MutationResult{Revision: 1, Patched: len(patches)}, nil
 }
 
 func TestReadImageEditFileBytesRejectsOversizedInput(t *testing.T) {

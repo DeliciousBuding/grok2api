@@ -20,6 +20,8 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
+const feedbackFailurePersistTimeout = 5 * time.Second
+
 // chatCompletionRequest is the OpenAI-compatible chat request body.
 type chatCompletionRequest struct {
 	Model              string           `json:"model"`
@@ -472,7 +474,9 @@ func (s *Server) feedbackError(token string, err error, modeID int) {
 	s.Directory.Feedback(token, kind, modeID, nil, nil)
 	// Also persist to the repository if unauthorized + expired.
 	if kind == account.FbUnauthorized && s.Refresh != nil {
-		s.Refresh.RecordFailure(context.Background(), token, modeID, appErr)
+		ctx, cancel := context.WithTimeout(context.Background(), feedbackFailurePersistTimeout)
+		defer cancel()
+		s.Refresh.RecordFailure(ctx, token, modeID, appErr)
 	}
 }
 
