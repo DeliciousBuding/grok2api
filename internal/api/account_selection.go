@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -100,22 +101,7 @@ func timeoutClassDuration(class string, defaultSec int) time.Duration {
 // asAppError is a thin wrapper around errors.As to avoid pulling errors
 // at every call site.
 func asAppError(err error, target **platform.AppError) bool {
-	if err == nil {
-		return false
-	}
-	for err != nil {
-		if ae, ok := err.(*platform.AppError); ok {
-			*target = ae
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		u, ok := err.(unwrapper)
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
+	return errors.As(err, target)
 }
 
 // sscanfInt parses an integer like fmt.Sscanf("%d", ...).

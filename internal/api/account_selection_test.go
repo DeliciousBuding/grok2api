@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,6 +39,15 @@ func TestRetryBudgetStopsAtConfiguredLimit(t *testing.T) {
 	}
 	if shouldRetryAttempt(err, 1, 1) {
 		t.Fatal("retry budget should be exhausted when attempt reaches max")
+	}
+}
+
+func TestShouldRetryUpstreamFindsJoinedAppError(t *testing.T) {
+	loadTestConfig(t, "[retry]\non_codes = [\"503\"]\n")
+	err := errors.Join(errors.New("stream closed"), platform.UpstreamError("unavailable", http.StatusServiceUnavailable, ""))
+
+	if !shouldRetryUpstream(err) {
+		t.Fatal("joined upstream AppError should remain retryable")
 	}
 }
 
