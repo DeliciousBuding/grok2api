@@ -141,11 +141,17 @@ func (s *RefreshService) RefreshScheduled(ctx context.Context, pool string) (int
 	refreshed := 0
 	failed := 0
 	for _, st := range []Status{statusActive, statusCooling} {
+		if ctx.Err() != nil {
+			break
+		}
 		records, err := s.listScheduledRecords(ctx, pool, st)
 		if err != nil {
 			return refreshed, failed, err
 		}
 		for _, rec := range records {
+			if ctx.Err() != nil {
+				break
+			}
 			if pool != "" && rec.Pool != pool {
 				continue
 			}

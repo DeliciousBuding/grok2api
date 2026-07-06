@@ -184,6 +184,25 @@ func TestRefreshScheduledDoesNotSkipRemainingAccountsWhenEarlierPageExpires(t *t
 	}
 }
 
+func TestRefreshScheduledStopsAfterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	const accountCount = 3
+	repo := newScheduledRefreshRepo(accountCount)
+	fetcher := &cancelingQuotaFetcher{cancel: cancel}
+	service := NewRefreshService(repo, fetcher)
+
+	refreshed, failed, err := service.RefreshScheduled(ctx, "")
+	if err != nil {
+		t.Fatalf("refresh scheduled should report counts without returning a batch error: %v", err)
+	}
+	if refreshed != 0 || failed != 1 {
+		t.Fatalf("expected only first canceled account to be counted, got refreshed=%d failed=%d", refreshed, failed)
+	}
+	if got := fetcher.callCount(); got != 1 {
+		t.Fatalf("expected context cancellation to stop remaining scheduled refreshes, got %d upstream calls", got)
+	}
+}
+
 type blockingQuotaFetcher struct {
 	mu      sync.Mutex
 	calls   int
