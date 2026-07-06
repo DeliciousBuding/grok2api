@@ -143,7 +143,7 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 `asset.max_fetch_image_concurrency` caps simultaneous remote image downloads for `response_format=b64_json`. Set it when many image results can be converted in parallel and the process needs a predictable outbound-download ceiling; queued fetches still honor client cancellation. `0` preserves the historical unlimited behavior.
 
-Remote image downloads for `response_format=b64_json` reuse a shared HTTP transport for connection pooling while still applying the current per-request timeout and cancellation context to each fetch.
+Remote image downloads for `response_format=b64_json` reuse a shared HTTP transport for connection pooling while still applying the current per-request timeout and cancellation context to each fetch. The transport keeps an explicit per-host idle pool so repeated image downloads to the same upstream host are not limited by Go's small implicit default.
 
 `/metrics` also reports `grok2api_asset_fetch_total{kind="..."}` for `response_format=b64_json` remote image downloads. Kinds are intentionally low-cardinality and URL-free: `success`, `status`, `too_large`, `timeout`, `canceled`, and `request_error`. Use this counter to separate upstream image URL failures from gateway admission, account-pool, and model-response errors.
 

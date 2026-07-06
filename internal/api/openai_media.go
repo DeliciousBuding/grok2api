@@ -83,9 +83,10 @@ func (s *Server) handleFileVideo(c *gin.Context) {
 // --- Image generation (standalone) ---
 
 const (
-	defaultImageEditMaxFileBytes = 30 << 20
-	defaultFetchImageMaxBytes    = 50 << 20
-	defaultFetchImageTimeout     = 30 * time.Second
+	defaultImageEditMaxFileBytes         = 30 << 20
+	defaultFetchImageMaxBytes            = 50 << 20
+	defaultFetchImageTimeout             = 30 * time.Second
+	defaultFetchImageMaxIdleConnsPerHost = 100
 )
 
 func (s *Server) handleImageGenerations(c *gin.Context) {
@@ -462,7 +463,16 @@ func extractImageURLsFromMarkdown(text string) []string {
 }
 
 var fetchImageLimiter = newDynamicConcurrencyLimiter()
-var fetchImageTransport http.RoundTripper = http.DefaultTransport.(*http.Transport).Clone()
+var fetchImageTransport http.RoundTripper = newFetchImageTransport()
+
+func newFetchImageTransport() *http.Transport {
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.MaxIdleConnsPerHost = defaultFetchImageMaxIdleConnsPerHost
+	if tr.MaxIdleConns < tr.MaxIdleConnsPerHost {
+		tr.MaxIdleConns = tr.MaxIdleConnsPerHost
+	}
+	return tr
+}
 
 type imageFetchStatusError struct {
 	status int

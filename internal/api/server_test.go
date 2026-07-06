@@ -827,6 +827,19 @@ func TestFetchImageHTTPClientSharesTransportWithCurrentTimeout(t *testing.T) {
 	}
 }
 
+func TestFetchImageTransportHasExplicitIdlePool(t *testing.T) {
+	tr, ok := fetchImageTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected image fetch transport to be *http.Transport, got %T", fetchImageTransport)
+	}
+	if tr.MaxIdleConnsPerHost < defaultFetchImageMaxIdleConnsPerHost {
+		t.Fatalf("expected MaxIdleConnsPerHost >= %d, got %d", defaultFetchImageMaxIdleConnsPerHost, tr.MaxIdleConnsPerHost)
+	}
+	if tr.MaxIdleConns < tr.MaxIdleConnsPerHost {
+		t.Fatalf("expected MaxIdleConns %d to cover per-host idle pool %d", tr.MaxIdleConns, tr.MaxIdleConnsPerHost)
+	}
+}
+
 func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_fetch_image_concurrency = 1\n")
 
