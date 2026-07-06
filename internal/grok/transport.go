@@ -19,7 +19,10 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
-const defaultUpstreamMaxResponseBytes = 16 << 20
+const (
+	defaultUpstreamMaxResponseBytes = 16 << 20
+	defaultUpstreamMaxErrorBytes    = 4096
+)
 
 // Transport is the HTTP client for upstream Grok requests.  It uses
 // tlsclient.Client for TLS fingerprinting (Chrome_146) and converts
@@ -140,13 +143,14 @@ func (t *Transport) PostJSON(ctx context.Context, urlStr, token string, payload 
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		t.markResetIfStatus(resp.StatusCode)
+		body := readUpstreamErrorBody(resp)
+		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
+	}
 	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		t.markResetIfStatus(resp.StatusCode)
-		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return map[string]any{}, nil
@@ -166,7 +170,7 @@ func (t *Transport) PostStream(ctx context.Context, urlStr, token string, payloa
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.markResetIfStatus(resp.StatusCode)
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := readUpstreamErrorBody(resp)
 		resp.Body.Close()
 		bt := truncBody(body, 400)
 		msg := fmt.Sprintf("Upstream returned %d", resp.StatusCode)
@@ -185,13 +189,14 @@ func (t *Transport) GetJSON(ctx context.Context, urlStr, token string, opts ...R
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		t.markResetIfStatus(resp.StatusCode)
+		body := readUpstreamErrorBody(resp)
+		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
+	}
 	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		t.markResetIfStatus(resp.StatusCode)
-		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return map[string]any{}, nil
@@ -210,13 +215,14 @@ func (t *Transport) DeleteJSON(ctx context.Context, urlStr, token string, opts .
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		t.markResetIfStatus(resp.StatusCode)
+		body := readUpstreamErrorBody(resp)
+		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
+	}
 	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
 		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		t.markResetIfStatus(resp.StatusCode)
-		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
 		return map[string]any{}, nil
@@ -236,7 +242,7 @@ func (t *Transport) GetBytes(ctx context.Context, urlStr, token string, opts ...
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.markResetIfStatus(resp.StatusCode)
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		body := readUpstreamErrorBody(resp)
 		resp.Body.Close()
 		return nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 400))
 	}
@@ -251,17 +257,23 @@ func (t *Transport) PostGRPCWeb(ctx context.Context, urlStr, token string, paylo
 		return nil, nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.markResetIfStatus(resp.StatusCode)
+		body := readUpstreamErrorBody(resp)
+		return nil, nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 300))
+	}
 	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
 		return nil, nil, err
 	}
-	if resp.StatusCode != 200 {
-		t.markResetIfStatus(resp.StatusCode)
-		return nil, nil, platform.UpstreamError(fmt.Sprintf("Upstream returned %d", resp.StatusCode), resp.StatusCode, truncBody(body, 300))
-	}
 	ct := resp.Header.Get("Content-Type")
 	msgs, trailers := ParseGRPCWebResponse(body, ct, resp.Header)
 	return msgs, trailers, nil
+}
+
+func readUpstreamErrorBody(resp *http.Response) []byte {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, defaultUpstreamMaxErrorBytes))
+	return body
 }
 
 func readUpstreamResponseBody(resp *http.Response) ([]byte, error) {
