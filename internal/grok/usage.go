@@ -134,6 +134,9 @@ func fetchAllQuotaModes(ctx context.Context, modes []int, fetch quotaFetchFunc) 
 		out[r.modeID] = *r.quota
 	}
 	if len(out) == 0 {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 	return out, nil
