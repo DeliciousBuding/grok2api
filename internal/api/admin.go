@@ -1022,16 +1022,27 @@ func (s *Server) clearTokenAssets(ctx context.Context, token string) (int, error
 		return 0, err
 	}
 	items := extractAssetItems(resp)
+	deleted := clearAssetIDs(ctx, items, func(ctx context.Context, assetID string) error {
+		_, err := grok.DeleteAsset(ctx, s.Transport, token, assetID)
+		return err
+	})
+	return deleted, nil
+}
+
+func clearAssetIDs(ctx context.Context, items []string, deleteAsset func(context.Context, string) error) int {
 	deleted := 0
 	for _, assetID := range items {
+		if ctx.Err() != nil {
+			break
+		}
 		if assetID == "" {
 			continue
 		}
-		if _, err := grok.DeleteAsset(ctx, s.Transport, token, assetID); err == nil {
+		if err := deleteAsset(ctx, assetID); err == nil {
 			deleted++
 		}
 	}
-	return deleted, nil
+	return deleted
 }
 
 // extractAssetItems returns the list of asset IDs from a ListAssets response.

@@ -1105,6 +1105,24 @@ func TestAdminBatchCacheClearRejectsEmptyTokensBeforeRefreshCheck(t *testing.T) 
 	}
 }
 
+func TestClearAssetIDsStopsAfterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	called := []string{}
+
+	deleted := clearAssetIDs(ctx, []string{"asset-a", "asset-b", "asset-c"}, func(ctx context.Context, assetID string) error {
+		called = append(called, assetID)
+		cancel()
+		return nil
+	})
+
+	if deleted != 1 {
+		t.Fatalf("expected only first asset to be counted as deleted, got %d", deleted)
+	}
+	if len(called) != 1 || called[0] != "asset-a" {
+		t.Fatalf("expected cancellation to stop remaining asset deletes, called=%v", called)
+	}
+}
+
 func TestAdminCacheListRejectsInvalidQueryValues(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
