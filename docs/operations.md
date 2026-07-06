@@ -1,4 +1,4 @@
-最后更新：2026-07-06 17:55
+最后更新：2026-07-07 00:00
 
 # Operations Runbook
 
@@ -145,7 +145,9 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 Remote image downloads for `response_format=b64_json` reuse a shared HTTP transport for connection pooling while still applying the current per-request timeout and cancellation context to each fetch. The transport keeps an explicit per-host idle pool so repeated image downloads to the same upstream host are not limited by Go's small implicit default.
 
-`/metrics` also reports `grok2api_asset_fetch_total{kind="..."}` for `response_format=b64_json` remote image downloads. Kinds are intentionally low-cardinality and URL-free: `success`, `status`, `too_large`, `timeout`, `canceled`, and `request_error`. Use this counter to separate upstream image URL failures from gateway admission, account-pool, and model-response errors.
+Remote image downloads only accept absolute HTTP(S) URLs and reject direct localhost, private, link-local, multicast, or unspecified IP destinations before dialing. Redirect targets go through the same validation so generated-image fetches cannot be bounced into local service endpoints. DNS-resolved private targets should still be blocked with deployment egress policy if that threat matters for the environment.
+
+`/metrics` also reports `grok2api_asset_fetch_total{kind="..."}` for `response_format=b64_json` remote image downloads. Kinds are intentionally low-cardinality and URL-free: `success`, `status`, `too_large`, `blocked`, `timeout`, `canceled`, and `request_error`. Use this counter to separate upstream image URL failures from gateway admission, account-pool, and model-response errors.
 
 Chat-routed lite image generation also checks the client request context before starting fan-out workers, so already-canceled requests do not reserve accounts or start upstream image attempts.
 

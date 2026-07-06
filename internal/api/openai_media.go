@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -635,6 +637,12 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := validateFetchImageURL(url); err != nil {
+		return "", err
+	}
 	limit := config.Global().GetInt("asset.max_fetch_image_concurrency", 0)
 	release, err := fetchImageLimiter.acquire(ctx, limit)
 	if err != nil {
@@ -666,6 +674,12 @@ func fetchImageHTTPClient() *http.Client {
 	return &http.Client{
 		Transport: fetchImageTransport,
 		Timeout:   fetchImageTimeout(),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 3 {
+				return imageFetchBlockedError{reason: "too many redirects"}
+			}
+			return validateParsedFetchImageURL(req.URL)
+		},
 	}
 }
 
@@ -692,9 +706,62 @@ func readFetchedImageBytes(r io.Reader) ([]byte, error) {
 	return body, nil
 }
 
+type imageFetchBlockedError struct {
+	reason string
+}
+
+func (e imageFetchBlockedError) Error() string {
+	if e.reason == "" {
+		return "image fetch blocked"
+	}
+	return "image fetch blocked: " + e.reason
+}
+
+func validateFetchImageURL(raw string) error {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return imageFetchBlockedError{reason: "invalid url"}
+	}
+	return validateParsedFetchImageURL(u)
+}
+
+func validateParsedFetchImageURL(u *url.URL) error {
+	if u == nil || !u.IsAbs() || u.Host == "" {
+		return imageFetchBlockedError{reason: "absolute http url required"}
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https":
+	default:
+		return imageFetchBlockedError{reason: "unsupported scheme"}
+	}
+	host := strings.TrimSpace(u.Hostname())
+	if host == "" {
+		return imageFetchBlockedError{reason: "missing host"}
+	}
+	lowerHost := strings.ToLower(strings.TrimSuffix(host, "."))
+	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
+		return imageFetchBlockedError{reason: "local host"}
+	}
+	if i := strings.IndexByte(host, '%'); i >= 0 {
+		host = host[:i]
+	}
+	if addr, err := netip.ParseAddr(host); err == nil {
+		addr = addr.Unmap()
+		if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() ||
+			addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified() {
+			return imageFetchBlockedError{reason: "non-public ip"}
+		}
+	}
+	return nil
+}
+
 func imageFetchMetricKind(err error) string {
 	if err == nil {
 		return "success"
+	}
+	var blockedErr imageFetchBlockedError
+	if errors.As(err, &blockedErr) {
+		return "blocked"
 	}
 	if errors.Is(err, context.Canceled) {
 		return "canceled"

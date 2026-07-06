@@ -987,12 +987,15 @@ func TestReadImageEditFileBytesUsesDefaultLimitWhenUnconfigured(t *testing.T) {
 
 func TestFetchImageBase64RejectsNonSuccessStatus(t *testing.T) {
 	loadTestConfig(t, "")
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	t.Cleanup(upstream.Close)
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    req,
+		}, nil
+	})
 
-	_, err := fetchImageBase64(context.Background(), upstream.URL+"/missing.png")
+	_, err := fetchImageBase64(context.Background(), "https://assets.grok.com/missing.png")
 	if err == nil {
 		t.Fatal("expected non-success image response to fail")
 	}
@@ -1004,16 +1007,19 @@ func TestFetchImageBase64RejectsNonSuccessStatus(t *testing.T) {
 func TestFetchImageBase64HonorsCanceledContext(t *testing.T) {
 	loadTestConfig(t, "")
 	var requests int32
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
 		atomic.AddInt32(&requests, 1)
-		_, _ = w.Write([]byte("not reached"))
-	}))
-	t.Cleanup(upstream.Close)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("not reached")),
+			Request:    req,
+		}, nil
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := fetchImageBase64(ctx, upstream.URL+"/image.png")
+	_, err := fetchImageBase64(ctx, "https://assets.grok.com/image.png")
 	if err == nil {
 		t.Fatal("expected canceled context to fail")
 	}
@@ -1027,13 +1033,16 @@ func TestFetchImageBase64HonorsCanceledContext(t *testing.T) {
 
 func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_fetch_image_bytes = 4\n")
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		_, _ = w.Write([]byte("12345"))
-	}))
-	t.Cleanup(upstream.Close)
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       io.NopCloser(strings.NewReader("12345")),
+			Request:    req,
+		}, nil
+	})
 
-	_, err := fetchImageBase64(context.Background(), upstream.URL+"/image.png")
+	_, err := fetchImageBase64(context.Background(), "https://assets.grok.com/image.png")
 	if err == nil {
 		t.Fatal("expected oversized fetched image to fail")
 	}
@@ -1044,14 +1053,13 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 
 func TestFetchImageBase64UsesConfiguredTimeout(t *testing.T) {
 	loadTestConfig(t, "[asset]\nfetch_image_timeout_sec = 1\n")
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * time.Second)
-		_, _ = w.Write([]byte("ok"))
-	}))
-	t.Cleanup(upstream.Close)
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
+		<-req.Context().Done()
+		return nil, req.Context().Err()
+	})
 
 	start := time.Now()
-	_, err := fetchImageBase64(context.Background(), upstream.URL+"/slow.png")
+	_, err := fetchImageBase64(context.Background(), "https://assets.grok.com/slow.png")
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -1103,7 +1111,7 @@ func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	var maxSeen int32
 	entered := make(chan struct{}, 2)
 	releaseFirst := make(chan struct{})
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
 		now := atomic.AddInt32(&current, 1)
 		for {
 			seen := atomic.LoadInt32(&maxSeen)
@@ -1115,15 +1123,18 @@ func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 		if now == 1 {
 			<-releaseFirst
 		}
-		_, _ = w.Write([]byte("ok"))
 		atomic.AddInt32(&current, -1)
-	}))
-	t.Cleanup(upstream.Close)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    req,
+		}, nil
+	})
 
 	errCh := make(chan error, 2)
 	for i := 0; i < 2; i++ {
 		go func() {
-			_, err := fetchImageBase64(context.Background(), upstream.URL+"/image.png")
+			_, err := fetchImageBase64(context.Background(), "https://assets.grok.com/image.png")
 			errCh <- err
 		}()
 	}
@@ -1498,13 +1509,18 @@ func TestFinishCapturedChatTextRecordsUpstreamFailureFeedback(t *testing.T) {
 
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "not found", http.StatusNotFound)
-	}))
-	t.Cleanup(upstream.Close)
+	oldTransport := fetchImageTransport
+	fetchImageTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusNotFound,
+			Body:       io.NopCloser(strings.NewReader("not found")),
+			Request:    req,
+		}, nil
+	})
+	t.Cleanup(func() { fetchImageTransport = oldTransport })
 
 	_, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
-		{url: upstream.URL + "/missing.png"},
+		{url: "https://assets.grok.com/missing.png"},
 	})
 	if err == nil {
 		t.Fatal("expected b64_json image fetch failure to return an error")
@@ -1521,30 +1537,39 @@ func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.
 func TestRenderGeneratedImagesRecordsB64FetchMetrics(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_fetch_image_bytes = 4\n")
 	reg := metrics.NewRegistry()
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
+	oldTransport := fetchImageTransport
+	fetchImageTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		body := ""
+		status := http.StatusOK
+		switch req.URL.Path {
 		case "/ok.png":
-			_, _ = w.Write([]byte("ok"))
+			body = "ok"
 		case "/large.png":
-			_, _ = w.Write([]byte("12345"))
+			body = "12345"
 		default:
-			http.Error(w, "not found", http.StatusNotFound)
+			status = http.StatusNotFound
+			body = "not found"
 		}
-	}))
-	t.Cleanup(upstream.Close)
+		return &http.Response{
+			StatusCode: status,
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	})
+	t.Cleanup(func() { fetchImageTransport = oldTransport })
 
 	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
-		{url: upstream.URL + "/ok.png"},
+		{url: "https://assets.grok.com/ok.png"},
 	}, reg); err != nil {
 		t.Fatalf("expected successful fetch: %v", err)
 	}
 	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
-		{url: upstream.URL + "/missing.png"},
+		{url: "https://assets.grok.com/missing.png"},
 	}, reg); err == nil {
 		t.Fatal("expected status failure")
 	}
 	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
-		{url: upstream.URL + "/large.png"},
+		{url: "https://assets.grok.com/large.png"},
 	}, reg); err == nil {
 		t.Fatal("expected oversize failure")
 	}
@@ -1559,8 +1584,55 @@ func TestRenderGeneratedImagesRecordsB64FetchMetrics(t *testing.T) {
 			t.Fatalf("expected metrics output to contain %q, got:\n%s", needle, out)
 		}
 	}
-	if strings.Contains(out, upstream.URL) {
+	if strings.Contains(out, "assets.grok.com") {
 		t.Fatalf("asset fetch metrics must not expose source URLs: %s", out)
+	}
+}
+
+func TestValidateFetchImageURLRejectsUnsafeDestinations(t *testing.T) {
+	cases := []string{
+		"/relative.png",
+		"file:///tmp/image.png",
+		"http://localhost/image.png",
+		"http://127.0.0.1/image.png",
+		"http://10.0.0.5/image.png",
+		"http://[::1]/image.png",
+	}
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			if err := validateFetchImageURL(raw); err == nil {
+				t.Fatalf("expected unsafe image URL %q to be rejected", raw)
+			}
+		})
+	}
+
+	if err := validateFetchImageURL("https://assets.grok.com/generated.png"); err != nil {
+		t.Fatalf("expected public Grok asset URL to be accepted: %v", err)
+	}
+}
+
+func TestFetchImageBase64BlocksUnsafeRedirect(t *testing.T) {
+	oldTransport := fetchImageTransport
+	fetchImageTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.URL.Host == "assets.grok.com" {
+			return &http.Response{
+				StatusCode: http.StatusFound,
+				Header:     http.Header{"Location": []string{"http://127.0.0.1/private.png"}},
+				Body:       io.NopCloser(strings.NewReader("")),
+				Request:    req,
+			}, nil
+		}
+		t.Fatalf("unsafe redirect target should be rejected before RoundTrip, got %s", req.URL.String())
+		return nil, nil
+	})
+	t.Cleanup(func() { fetchImageTransport = oldTransport })
+
+	_, err := fetchImageBase64(context.Background(), "https://assets.grok.com/generated.png")
+	if err == nil {
+		t.Fatal("expected unsafe redirect to be rejected")
+	}
+	if got := imageFetchMetricKind(err); got != "blocked" {
+		t.Fatalf("expected blocked metric kind, got %q from %v", got, err)
 	}
 }
 
@@ -1997,6 +2069,19 @@ func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, s
 		t.Fatalf("close multipart writer: %v", err)
 	}
 	return body, writer.FormDataContentType()
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func withFetchImageTransport(t *testing.T, fn func(*http.Request) (*http.Response, error)) {
+	t.Helper()
+	oldTransport := fetchImageTransport
+	fetchImageTransport = roundTripFunc(fn)
+	t.Cleanup(func() { fetchImageTransport = oldTransport })
 }
 
 type snapshotRepo struct {
