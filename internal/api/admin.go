@@ -249,6 +249,43 @@ func parseAdminBatchConcurrency(c *gin.Context) (int, error) {
 	return parseBoundedPositiveQueryInt(c, "concurrency", adminDefaultBatchConcurrency, adminMaxBatchConcurrency)
 }
 
+func runAdminTokenWorkers(ctx context.Context, tokens []string, concurrency int, work func(context.Context, string)) {
+	if len(tokens) == 0 {
+		return
+	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	if concurrency > len(tokens) {
+		concurrency = len(tokens)
+	}
+	jobs := make(chan string)
+	wg := sync.WaitGroup{}
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for token := range jobs {
+				work(ctx, token)
+				if ctx.Err() != nil {
+					return
+				}
+			}
+		}()
+	}
+	for _, token := range tokens {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return
+		case jobs <- token:
+		}
+	}
+	close(jobs)
+	wg.Wait()
+}
+
 func serializeRecord(rec *account.Record) map[string]any {
 	qs := rec.QuotaSet()
 	quota := map[string]any{}
@@ -826,29 +863,20 @@ func (s *Server) handleBatchNSFW(c *gin.Context) {
 	defer cancel()
 	results := map[string]any{}
 	mu := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, conc)
 	successCount := 0
 	failedCount := 0
-	for _, tok := range tokens {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			err := s.runNSFWOne(ctx, t, enabled)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				results[maskToken(t)] = gin.H{"error": err.Error()}
-				failedCount++
-			} else {
-				results[maskToken(t)] = gin.H{"success": true}
-				successCount++
-			}
-		}(tok)
-	}
-	wg.Wait()
+	runAdminTokenWorkers(ctx, tokens, conc, func(ctx context.Context, t string) {
+		err := s.runNSFWOne(ctx, t, enabled)
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			results[maskToken(t)] = gin.H{"error": err.Error()}
+			failedCount++
+		} else {
+			results[maskToken(t)] = gin.H{"success": true}
+			successCount++
+		}
+	})
 	tokenIDs := adminAuditTokenIDs(tokens)
 	state := "enabled"
 	if !enabled {
@@ -902,31 +930,22 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 	defer cancel()
 	results := map[string]any{}
 	mu := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, conc)
 	refreshedCount := 0
 	failedCount := 0
-	for _, tok := range tokens {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			refreshed, _, err := s.Refresh.RefreshTokens(ctx, []string{t})
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				results[maskToken(t)] = gin.H{"error": err.Error()}
-				failedCount++
-			} else {
-				results[maskToken(t)] = gin.H{"refreshed": refreshed > 0}
-				if refreshed > 0 {
-					refreshedCount++
-				}
+	runAdminTokenWorkers(ctx, tokens, conc, func(ctx context.Context, t string) {
+		refreshed, _, err := s.Refresh.RefreshTokens(ctx, []string{t})
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			results[maskToken(t)] = gin.H{"error": err.Error()}
+			failedCount++
+		} else {
+			results[maskToken(t)] = gin.H{"refreshed": refreshed > 0}
+			if refreshed > 0 {
+				refreshedCount++
 			}
-		}(tok)
-	}
-	wg.Wait()
+		}
+	})
 	tokenIDs := adminAuditTokenIDs(tokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "batch.refresh",
@@ -967,29 +986,20 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 	defer cancel()
 	results := map[string]any{}
 	mu := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, conc)
 	deletedTotal := 0
 	failedCount := 0
-	for _, tok := range tokens {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			deleted, err := s.clearTokenAssets(ctx, t)
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				results[maskToken(t)] = gin.H{"error": err.Error()}
-				failedCount++
-			} else {
-				results[maskToken(t)] = gin.H{"deleted": deleted}
-				deletedTotal += deleted
-			}
-		}(tok)
-	}
-	wg.Wait()
+	runAdminTokenWorkers(ctx, tokens, conc, func(ctx context.Context, t string) {
+		deleted, err := s.clearTokenAssets(ctx, t)
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			results[maskToken(t)] = gin.H{"error": err.Error()}
+			failedCount++
+		} else {
+			results[maskToken(t)] = gin.H{"deleted": deleted}
+			deletedTotal += deleted
+		}
+	})
 	tokenIDs := adminAuditTokenIDs(tokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "batch.cache_clear",
