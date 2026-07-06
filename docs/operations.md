@@ -1,4 +1,4 @@
-最后更新：2026-07-06 15:34
+最后更新：2026-07-06 15:52
 
 # Operations Runbook
 
@@ -112,6 +112,9 @@ stream_idle_sec = 60
 
 [asset]
 max_download_bytes = 31457280
+
+[upstream]
+max_response_bytes = 16777216
 ```
 
 Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
@@ -119,6 +122,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `asset.max_download_bytes` caps remote image/file downloads before they are re-uploaded to the upstream service. Values less than or equal to zero use the built-in 30MiB safety default.
+
+`upstream.max_response_bytes` caps non-streaming JSON and gRPC-web response bodies read into memory. SSE streaming responses are governed by request timeouts and stream idle timeouts instead.
 
 Request-path config reload checks are throttled to avoid filesystem stat and TOML parsing amplification under load. `POST /admin/api/config` still persists changes and forces an immediate reload; if an externally edited config file is temporarily invalid, the previous in-memory snapshot remains in use until a valid reload succeeds.
 

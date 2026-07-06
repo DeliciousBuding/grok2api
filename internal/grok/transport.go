@@ -19,6 +19,8 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
+const defaultUpstreamMaxResponseBytes = 16 << 20
+
 // Transport is the HTTP client for upstream Grok requests.  It uses
 // tlsclient.Client for TLS fingerprinting (Chrome_146) and converts
 // everything to standard *http.Response so callers never see fhttp.
@@ -138,9 +140,9 @@ func (t *Transport) PostJSON(ctx context.Context, urlStr, token string, payload 
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
-		return nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.markResetIfStatus(resp.StatusCode)
@@ -183,9 +185,9 @@ func (t *Transport) GetJSON(ctx context.Context, urlStr, token string, opts ...R
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
-		return nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.markResetIfStatus(resp.StatusCode)
@@ -208,9 +210,9 @@ func (t *Transport) DeleteJSON(ctx context.Context, urlStr, token string, opts .
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
-		return nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		t.markResetIfStatus(resp.StatusCode)
@@ -249,9 +251,9 @@ func (t *Transport) PostGRPCWeb(ctx context.Context, urlStr, token string, paylo
 		return nil, nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	body, err := readUpstreamResponseBody(resp)
 	if err != nil {
-		return nil, nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
+		return nil, nil, err
 	}
 	if resp.StatusCode != 200 {
 		t.markResetIfStatus(resp.StatusCode)
@@ -260,6 +262,21 @@ func (t *Transport) PostGRPCWeb(ctx context.Context, urlStr, token string, paylo
 	ct := resp.Header.Get("Content-Type")
 	msgs, trailers := ParseGRPCWebResponse(body, ct, resp.Header)
 	return msgs, trailers, nil
+}
+
+func readUpstreamResponseBody(resp *http.Response) ([]byte, error) {
+	limit := config.Global().GetInt("upstream.max_response_bytes", defaultUpstreamMaxResponseBytes)
+	if limit <= 0 {
+		limit = defaultUpstreamMaxResponseBytes
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
+	if err != nil {
+		return nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
+	}
+	if len(body) > limit {
+		return nil, platform.UpstreamError(fmt.Sprintf("upstream response exceeds %d bytes", limit), resp.StatusCode, "")
+	}
+	return body, nil
 }
 
 // do builds standard *http.Request with headers, then sends via tlsclient.

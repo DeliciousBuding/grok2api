@@ -121,5 +121,9 @@ delete_timeout = 60
 # 远程资源下载最大字节数，<=0 使用安全默认值 30MiB
 max_download_bytes = 31457280
 
+[upstream]
+# 非流式上游响应最大字节数，<=0 使用安全默认值 16MiB
+max_response_bytes = 16777216
+
 [nsfw]
 timeout = 60
