@@ -1256,6 +1256,65 @@ func TestWriteWSImageGenerationPostProcessFailureRecordsClientFailureAndAccountS
 	}
 }
 
+func TestFinishCapturedImageURLsRecordsSuccessFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	body := mustMarshalChatResponse(t, "grok-imagine-image-lite", "![image](https://assets.grok.com/generated.png)")
+
+	urls := server.finishCapturedImageURLs("grok-imagine-image-lite", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+
+	if len(urls) != 1 || urls[0] != "https://assets.grok.com/generated.png" {
+		t.Fatalf("expected generated image URL, got %v", urls)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-image-lite",status="200",surface="image"} 1`) {
+		t.Fatalf("expected image 200 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="success"} 1`) {
+		t.Fatalf("expected success feedback metric, got:\n%s", rendered)
+	}
+	if strings.Contains(rendered, `grok2api_empty_outputs_total{model="grok-imagine-image-lite",surface="image"}`) {
+		t.Fatalf("successful capture should not record empty output, got:\n%s", rendered)
+	}
+}
+
+func TestFinishCapturedImageURLsRecordsEmptyOutputFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	body := mustMarshalChatResponse(t, "grok-imagine-image-lite", "no usable image")
+
+	urls := server.finishCapturedImageURLs("grok-imagine-image-lite", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+
+	if len(urls) != 0 {
+		t.Fatalf("expected no generated image URLs, got %v", urls)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_empty_outputs_total{model="grok-imagine-image-lite",surface="image"} 1`) {
+		t.Fatalf("expected image empty-output metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-image-lite",status="502",surface="image"} 1`) {
+		t.Fatalf("expected image 502 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="server_error"} 1`) {
+		t.Fatalf("expected server_error feedback metric, got:\n%s", rendered)
+	}
+}
+
+func TestFinishCapturedImageURLsRecordsUpstreamFailureFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+
+	urls := server.finishCapturedImageURLs("grok-imagine-image-lite", &account.Lease{Token: "tok-a", ModeID: 1}, nil, platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
+
+	if len(urls) != 0 {
+		t.Fatalf("expected no generated image URLs, got %v", urls)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-image-lite",status="429",surface="image"} 1`) {
+		t.Fatalf("expected image 429 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="rate_limited"} 1`) {
+		t.Fatalf("expected rate_limited feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1322,6 +1381,15 @@ func TestRenderGeneratedImagesRecordsB64FetchMetrics(t *testing.T) {
 	if strings.Contains(out, upstream.URL) {
 		t.Fatalf("asset fetch metrics must not expose source URLs: %s", out)
 	}
+}
+
+func mustMarshalChatResponse(t *testing.T, modelName, content string) []byte {
+	t.Helper()
+	b, err := json.Marshal(makeChatResponse("chatcmpl-test", 1, modelName, content, "", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }
 
 func TestCaptureLiteImageBatchHonorsCanceledContextBeforeFanout(t *testing.T) {

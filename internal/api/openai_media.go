@@ -450,29 +450,51 @@ func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, s
 	}
 	s.metricsRegistry().IncAttempt("image", req.Model)
 	err := s.runGrokChatOnce(cw, r, lease, spec, message, fileInputs, temp, topP, emitThink, false, req.Model)
-	if err != nil {
-		if shouldRecordUpstreamStatus(err) {
-			s.metricsRegistry().IncUpstreamStatus("image", req.Model, metricStatusCode(err))
+	return s.finishCapturedImageURLs(req.Model, lease, cw.body, err)
+}
+
+func (s *Server) finishCapturedImageURLs(modelName string, lease *account.Lease, body []byte, upstreamErr error) []string {
+	if upstreamErr != nil {
+		if shouldRecordUpstreamStatus(upstreamErr) {
+			s.metricsRegistry().IncUpstreamStatus("image", modelName, metricStatusCode(upstreamErr))
+		}
+		if lease != nil {
+			s.feedbackError(lease.Token, upstreamErr, lease.ModeID)
 		}
 		return nil
 	}
-	s.metricsRegistry().IncUpstreamStatus("image", req.Model, http.StatusOK)
-
 	var obj map[string]any
-	if err := json.Unmarshal(cw.body, &obj); err != nil {
+	if err := json.Unmarshal(body, &obj); err != nil {
+		s.recordCapturedImageEmptyOutput(modelName, lease)
 		return nil
 	}
 	choices, _ := obj["choices"].([]any)
-	if len(choices) == 0 {
-		return nil
+	if len(choices) > 0 {
+		choice, _ := choices[0].(map[string]any)
+		msg, _ := choice["message"].(map[string]any)
+		if msg != nil {
+			text, _ := msg["content"].(string)
+			urls := extractImageURLsFromMarkdown(text)
+			if len(urls) > 0 {
+				s.metricsRegistry().IncUpstreamStatus("image", modelName, http.StatusOK)
+				if lease != nil {
+					s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+				}
+				return urls
+			}
+		}
 	}
-	choice, _ := choices[0].(map[string]any)
-	msg, _ := choice["message"].(map[string]any)
-	if msg == nil {
-		return nil
+	s.recordCapturedImageEmptyOutput(modelName, lease)
+	return nil
+}
+
+func (s *Server) recordCapturedImageEmptyOutput(modelName string, lease *account.Lease) {
+	err := platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
+	s.metricsRegistry().IncEmptyOutput("image", modelName)
+	s.metricsRegistry().IncUpstreamStatus("image", modelName, http.StatusBadGateway)
+	if lease != nil {
+		s.feedbackError(lease.Token, err, lease.ModeID)
 	}
-	text, _ := msg["content"].(string)
-	return extractImageURLsFromMarkdown(text)
 }
 
 // captureLiteImageBatch runs N concurrent chat-based image generation
