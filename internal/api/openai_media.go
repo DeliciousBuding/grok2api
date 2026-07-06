@@ -204,16 +204,16 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			return
 		}
 	}
-	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
-
 	if n < len(images) {
 		images = images[:n]
 	}
 	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images, s.metricsRegistry())
 	if err != nil {
+		s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
 		writeAppError(c, err)
 		return
 	}
+	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
 }
 
@@ -306,6 +306,9 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 	if len(regs) > 0 {
 		reg = regs[0]
 	}
+	if len(images) == 0 {
+		return nil, platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+	}
 	out := make([]map[string]any, 0, len(images))
 	for _, img := range images {
 		if responseFormat == "b64_json" {
@@ -326,6 +329,9 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 			continue
 		}
 		out = append(out, map[string]any{"url": img.url})
+	}
+	if len(out) == 0 {
+		return nil, platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
 	}
 	return out, nil
 }
