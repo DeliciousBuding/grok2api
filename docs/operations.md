@@ -1,4 +1,4 @@
-最后更新：2026-07-06 15:52
+最后更新：2026-07-06 16:07
 
 # Operations Runbook
 
@@ -112,6 +112,7 @@ stream_idle_sec = 60
 
 [asset]
 max_download_bytes = 31457280
+max_inline_image_bytes = 31457280
 
 [upstream]
 max_response_bytes = 16777216
@@ -122,6 +123,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `asset.max_download_bytes` caps remote image/file downloads before they are re-uploaded to the upstream service. Values less than or equal to zero use the built-in 30MiB safety default.
+
+`asset.max_inline_image_bytes` caps each multipart source image submitted to the image-edit endpoint. Oversized files return `image_file_too_large` instead of being truncated.
 
 `upstream.max_response_bytes` caps non-streaming JSON and gRPC-web response bodies read into memory. SSE streaming responses are governed by request timeouts and stream idle timeouts instead.
 

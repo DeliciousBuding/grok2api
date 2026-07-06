@@ -80,6 +80,8 @@ func (s *Server) handleFileVideo(c *gin.Context) {
 
 // --- Image generation (standalone) ---
 
+const defaultImageEditMaxFileBytes = 30 << 20
+
 func (s *Server) handleImageGenerations(c *gin.Context) {
 	var req struct {
 		Model          string `json:"model"`
@@ -267,8 +269,12 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 		if err != nil {
 			continue
 		}
-		raw, _ := io.ReadAll(io.LimitReader(f, 30<<20))
+		raw, err := readImageEditFileBytes(f)
 		f.Close()
+		if err != nil {
+			writeAppError(c, err)
+			return
+		}
 		if len(raw) == 0 {
 			continue
 		}
@@ -300,6 +306,25 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 		out = append(out, map[string]any{"url": url})
 	}
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
+}
+
+func readImageEditFileBytes(r io.Reader) ([]byte, error) {
+	limit := config.Global().GetInt("asset.max_inline_image_bytes", defaultImageEditMaxFileBytes)
+	if limit <= 0 {
+		limit = defaultImageEditMaxFileBytes
+	}
+	raw, err := io.ReadAll(io.LimitReader(r, int64(limit)+1))
+	if err != nil {
+		return nil, platform.ValidationError("Invalid image file: "+err.Error(), "image[]")
+	}
+	if len(raw) > limit {
+		return nil, platform.ValidationErrorCode(
+			fmt.Sprintf("image file exceeds %d bytes", limit),
+			"image[]",
+			"image_file_too_large",
+		)
+	}
+	return raw, nil
 }
 
 // captureImageURLs runs the non-streaming chat path and extracts any image URLs.

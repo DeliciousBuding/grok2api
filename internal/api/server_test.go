@@ -665,6 +665,27 @@ func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	}
 }
 
+func TestReadImageEditFileBytesRejectsOversizedInput(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_inline_image_bytes = 4\n")
+
+	_, err := readImageEditFileBytes(strings.NewReader("12345"))
+	if err == nil {
+		t.Fatal("expected oversized image file to fail")
+	}
+	if !strings.Contains(err.Error(), "image file exceeds") {
+		t.Fatalf("expected size-limit error, got %v", err)
+	}
+}
+
+func TestReadImageEditFileBytesUsesDefaultLimitWhenUnconfigured(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_inline_image_bytes = 0\n")
+
+	_, err := readImageEditFileBytes(strings.NewReader(strings.Repeat("x", defaultImageEditMaxFileBytes+1)))
+	if err == nil {
+		t.Fatal("expected default image edit file limit to reject oversized input")
+	}
+}
+
 func TestAdminBatchCacheClearRejectsEmptyTokensBeforeRefreshCheck(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)

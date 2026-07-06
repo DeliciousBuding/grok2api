@@ -253,6 +253,7 @@ upload_timeout = 60             # 资源上传超时（秒）
 list_timeout = 60               # 资源列表超时（秒）
 delete_timeout = 60             # 资源删除超时（秒）
 max_download_bytes = 31457280   # 远程资源下载上限（字节，<=0 使用安全默认值）
+max_inline_image_bytes = 31457280  # 图像编辑源图上限（字节，<=0 使用安全默认值）
 
 [upstream]
 max_response_bytes = 16777216   # 非流式上游响应上限（字节，<=0 使用安全默认值）
