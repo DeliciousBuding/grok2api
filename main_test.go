@@ -16,6 +16,7 @@ read_timeout_sec = 12
 write_timeout_sec = 13
 idle_timeout_sec = 14
 shutdown_timeout_sec = 15
+max_header_bytes = 2048
 `)
 
 	srv := newHTTPServerFromConfig("127.0.0.1:0", http.NewServeMux(), config.Global())
@@ -35,6 +36,9 @@ shutdown_timeout_sec = 15
 	if got := serverShutdownTimeout(config.Global()); got != 15*time.Second {
 		t.Fatalf("expected shutdown timeout 15s, got %v", got)
 	}
+	if srv.MaxHeaderBytes != 2048 {
+		t.Fatalf("expected max header bytes 2048, got %d", srv.MaxHeaderBytes)
+	}
 }
 
 func TestHTTPServerConfigFallsBackForInvalidTimeouts(t *testing.T) {
@@ -44,6 +48,7 @@ read_timeout_sec = -1
 write_timeout_sec = -1
 idle_timeout_sec = -1
 shutdown_timeout_sec = -1
+max_header_bytes = -1
 `)
 
 	srv := newHTTPServerFromConfig("127.0.0.1:0", http.NewServeMux(), config.Global())
@@ -62,6 +67,9 @@ shutdown_timeout_sec = -1
 	}
 	if got := serverShutdownTimeout(config.Global()); got != defaultShutdownTimeout {
 		t.Fatalf("expected default shutdown timeout, got %v", got)
+	}
+	if srv.MaxHeaderBytes != defaultMaxHeaderBytes {
+		t.Fatalf("expected default max header bytes, got %d", srv.MaxHeaderBytes)
 	}
 }
 

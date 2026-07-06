@@ -19,6 +19,7 @@ func TestAccountStorageKeysAreStartupOnly(t *testing.T) {
 		"server.write_timeout_sec",
 		"server.idle_timeout_sec",
 		"server.shutdown_timeout_sec",
+		"server.max_header_bytes",
 	} {
 		if !IsStartupOnlyConfigKey(key) {
 			t.Fatalf("expected %s to be startup-only", key)

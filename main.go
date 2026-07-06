@@ -214,6 +214,7 @@ const (
 	defaultWriteTimeout      = 0
 	defaultIdleTimeout       = 120 * time.Second
 	defaultShutdownTimeout   = 15 * time.Second
+	defaultMaxHeaderBytes    = http.DefaultMaxHeaderBytes
 )
 
 func newHTTPServerFromConfig(addr string, handler http.Handler, cfg *config.Snapshot) *http.Server {
@@ -224,6 +225,7 @@ func newHTTPServerFromConfig(addr string, handler http.Handler, cfg *config.Snap
 		ReadTimeout:       configDurationSec(cfg, "server.read_timeout_sec", defaultReadTimeout),
 		WriteTimeout:      configDurationSec(cfg, "server.write_timeout_sec", defaultWriteTimeout),
 		IdleTimeout:       configDurationSec(cfg, "server.idle_timeout_sec", defaultIdleTimeout),
+		MaxHeaderBytes:    configPositiveInt(cfg, "server.max_header_bytes", defaultMaxHeaderBytes),
 	}
 }
 
@@ -240,6 +242,17 @@ func configDurationSec(cfg *config.Snapshot, key string, def time.Duration) time
 		return def
 	}
 	return time.Duration(n) * time.Second
+}
+
+func configPositiveInt(cfg *config.Snapshot, key string, def int) int {
+	if cfg == nil {
+		return def
+	}
+	n := cfg.GetInt(key, def)
+	if n <= 0 {
+		return def
+	}
+	return n
 }
 
 // runDirectorySyncLoop mirrors the Python _sync_loop: aggressively poll after
