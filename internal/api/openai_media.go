@@ -208,6 +208,12 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			return
 		}
 	}
+	if ctxErr := c.Request.Context().Err(); ctxErr != nil {
+		if err := wsImageRequestContextError(ctxErr); err != nil {
+			s.writeWSImageGenerationFailure(c, spec.ModelName, lease, err)
+		}
+		return
+	}
 	if n < len(images) {
 		images = images[:n]
 	}
@@ -369,6 +375,16 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 func isNoGeneratedImagesError(err error) bool {
 	var appErr *platform.AppError
 	return asAppError(err, &appErr) && appErr.Message == noGeneratedImagesMessage
+}
+
+func wsImageRequestContextError(err error) error {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return platform.NewAppError("image generation timeout", platform.ErrUpstream, "image_generation_timeout", http.StatusGatewayTimeout)
+	}
+	return err
 }
 
 func readImageEditFileBytes(r io.Reader) ([]byte, error) {

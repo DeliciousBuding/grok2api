@@ -598,6 +598,12 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 			}
 		}
 
+		if ctxErr := c.Request.Context().Err(); ctxErr != nil {
+			if err := wsImageRequestContextError(ctxErr); err != nil {
+				s.writeWSImageStreamFailure(sw, req.Model, lease, err)
+			}
+			return
+		}
 		if imageChunks == 0 {
 			err := platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
 			s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)
@@ -646,6 +652,14 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		}
 	}
 
+	if ctxErr := c.Request.Context().Err(); ctxErr != nil {
+		if err := wsImageRequestContextError(ctxErr); err != nil {
+			s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, metricStatusCode(err))
+			writeAppError(c, err)
+			s.feedbackError(lease.Token, err, lease.ModeID)
+		}
+		return
+	}
 	text, err := buildWSImageChatContent(imageURLs)
 	if err != nil {
 		s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)

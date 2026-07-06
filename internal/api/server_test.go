@@ -1145,6 +1145,23 @@ func TestRequestWithTimeoutClassUsesConfiguredDeadline(t *testing.T) {
 	}
 }
 
+func TestWSImageRequestContextErrorClassifiesDeadline(t *testing.T) {
+	err := wsImageRequestContextError(context.DeadlineExceeded)
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected AppError, got %T %[1]v", err)
+	}
+	if appErr.Status != http.StatusGatewayTimeout || appErr.Code != "image_generation_timeout" {
+		t.Fatalf("expected image generation 504 timeout, got status=%d code=%s", appErr.Status, appErr.Code)
+	}
+}
+
+func TestWSImageRequestContextErrorIgnoresCancellation(t *testing.T) {
+	if err := wsImageRequestContextError(context.Canceled); err != nil {
+		t.Fatalf("expected client cancellation to stay silent, got %T %[1]v", err)
+	}
+}
+
 func TestWriteWSImageStreamFailureRecordsMetricsAndFeedback(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
