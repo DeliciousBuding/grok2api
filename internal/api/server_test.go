@@ -1926,6 +1926,24 @@ func TestCollectAssetRowsBoundsActiveListCalls(t *testing.T) {
 	}
 }
 
+func TestCollectAssetRowsSkipsQueuedWorkAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	called := 0
+
+	rows, total := collectAssetRows(ctx, []string{"tok-a", "tok-b", "tok-c"}, 2, func(ctx context.Context, token string) (map[string]any, error) {
+		called++
+		return map[string]any{"assets": []any{map[string]any{"id": token + "-asset"}}}, nil
+	})
+
+	if called != 0 {
+		t.Fatalf("canceled asset list should not call upstream list, called=%d", called)
+	}
+	if len(rows) != 0 || total != 0 {
+		t.Fatalf("canceled asset list should not synthesize queued rows, rows=%d total=%d", len(rows), total)
+	}
+}
+
 func TestAdminAssetsListRejectsInvalidQueryValues(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)

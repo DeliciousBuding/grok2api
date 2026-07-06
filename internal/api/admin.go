@@ -1177,6 +1177,9 @@ func collectAssetRows(ctx context.Context, tokens []string, concurrency int, lis
 	if len(tokens) == 0 {
 		return []map[string]any{}, 0
 	}
+	if err := ctx.Err(); err != nil {
+		return []map[string]any{}, 0
+	}
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -1211,7 +1214,13 @@ func collectAssetRows(ctx context.Context, tokens []string, concurrency int, lis
 		}()
 	}
 	for _, token := range tokens {
-		jobs <- token
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return results, totalAssets
+		case jobs <- token:
+		}
 	}
 	close(jobs)
 	wg.Wait()
