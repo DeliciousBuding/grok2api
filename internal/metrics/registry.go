@@ -47,6 +47,7 @@ var counterHelp = map[string]string{
 	"grok2api_upstream_responses_total": "Observed upstream response statuses.",
 	"grok2api_account_feedback_total":   "Account feedback events by kind.",
 	"grok2api_empty_outputs_total":      "Responses that completed with an empty output.",
+	"grok2api_asset_fetch_total":        "Remote asset fetch outcomes by kind.",
 }
 
 var counterOrder = []string{
@@ -55,6 +56,7 @@ var counterOrder = []string{
 	"grok2api_upstream_responses_total",
 	"grok2api_account_feedback_total",
 	"grok2api_empty_outputs_total",
+	"grok2api_asset_fetch_total",
 }
 
 func NewRegistry() *Registry {
@@ -83,6 +85,10 @@ func (r *Registry) IncFeedback(kind string) {
 
 func (r *Registry) IncEmptyOutput(surface, model string) {
 	r.add("grok2api_empty_outputs_total", map[string]string{"surface": surface, "model": model}, 1)
+}
+
+func (r *Registry) IncAssetFetch(kind string) {
+	r.add("grok2api_asset_fetch_total", map[string]string{"kind": kind}, 1)
 }
 
 func (r *Registry) ObserveRequestDuration(method, path string, status int, seconds float64) {

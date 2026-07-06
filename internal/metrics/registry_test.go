@@ -12,6 +12,7 @@ func TestRegistryRendersCountersAndGaugesWithStableLabels(t *testing.T) {
 	reg.IncUpstreamStatus("chat", "grok-4.20-fast", 429)
 	reg.IncFeedback("rate_limited")
 	reg.IncEmptyOutput("responses", "grok-4.20-fast")
+	reg.IncAssetFetch("timeout")
 
 	out := reg.RenderText([]Gauge{{
 		Name:   "grok2api_accounts_total",
@@ -27,6 +28,7 @@ func TestRegistryRendersCountersAndGaugesWithStableLabels(t *testing.T) {
 		`grok2api_upstream_responses_total{model="grok-4.20-fast",status="429",surface="chat"} 1`,
 		`grok2api_account_feedback_total{kind="rate_limited"} 1`,
 		`grok2api_empty_outputs_total{model="grok-4.20-fast",surface="responses"} 1`,
+		`grok2api_asset_fetch_total{kind="timeout"} 1`,
 		`grok2api_accounts_total{pool="all"} 2`,
 	}
 	for _, needle := range want {

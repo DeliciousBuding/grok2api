@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/metrics"
 	"github.com/DeliciousBuding/grok2api/internal/model"
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
@@ -896,6 +897,52 @@ func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.
 	}
 	if appErr.Status != http.StatusBadGateway || appErr.Code != "upstream_error" {
 		t.Fatalf("expected 502 upstream_error, got status=%d code=%s", appErr.Status, appErr.Code)
+	}
+}
+
+func TestRenderGeneratedImagesRecordsB64FetchMetrics(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_fetch_image_bytes = 4\n")
+	reg := metrics.NewRegistry()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/ok.png":
+			_, _ = w.Write([]byte("ok"))
+		case "/large.png":
+			_, _ = w.Write([]byte("12345"))
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
+		{url: upstream.URL + "/ok.png"},
+	}, reg); err != nil {
+		t.Fatalf("expected successful fetch: %v", err)
+	}
+	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
+		{url: upstream.URL + "/missing.png"},
+	}, reg); err == nil {
+		t.Fatal("expected status failure")
+	}
+	if _, err := renderGeneratedImages(context.Background(), "b64_json", []generatedImage{
+		{url: upstream.URL + "/large.png"},
+	}, reg); err == nil {
+		t.Fatal("expected oversize failure")
+	}
+
+	out := reg.RenderText(nil)
+	for _, needle := range []string{
+		`grok2api_asset_fetch_total{kind="success"} 1`,
+		`grok2api_asset_fetch_total{kind="status"} 1`,
+		`grok2api_asset_fetch_total{kind="too_large"} 1`,
+	} {
+		if !strings.Contains(out, needle) {
+			t.Fatalf("expected metrics output to contain %q, got:\n%s", needle, out)
+		}
+	}
+	if strings.Contains(out, upstream.URL) {
+		t.Fatalf("asset fetch metrics must not expose source URLs: %s", out)
 	}
 }
 

@@ -145,6 +145,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 Remote image downloads for `response_format=b64_json` reuse a shared HTTP transport for connection pooling while still applying the current per-request timeout and cancellation context to each fetch.
 
+`/metrics` also reports `grok2api_asset_fetch_total{kind="..."}` for `response_format=b64_json` remote image downloads. Kinds are intentionally low-cardinality and URL-free: `success`, `status`, `too_large`, `timeout`, `canceled`, and `request_error`. Use this counter to separate upstream image URL failures from gateway admission, account-pool, and model-response errors.
+
 Chat-routed lite image generation also checks the client request context before starting fan-out workers, so already-canceled requests do not reserve accounts or start upstream image attempts.
 
 WebSocket image generation inherits the client request context as well. Client cancellation stops pending websocket dials and closes active imagine streams instead of waiting for the upstream read deadline.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/account"
 	"github.com/DeliciousBuding/grok2api/internal/config"
 	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/metrics"
 	"github.com/DeliciousBuding/grok2api/internal/model"
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 	"github.com/DeliciousBuding/grok2api/internal/storage"
@@ -141,7 +143,7 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 	for i := 0; i < n && i < len(imageURLs); i++ {
 		images = append(images, generatedImage{url: imageURLs[i]})
 	}
-	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images, s.metricsRegistry())
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -206,7 +208,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	if n < len(images) {
 		images = images[:n]
 	}
-	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images, s.metricsRegistry())
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -285,7 +287,7 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 	for _, url := range imageURLs {
 		images = append(images, generatedImage{url: url})
 	}
-	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images)
+	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images, s.metricsRegistry())
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -298,7 +300,11 @@ type generatedImage struct {
 	blob string
 }
 
-func renderGeneratedImages(ctx context.Context, responseFormat string, images []generatedImage) ([]map[string]any, error) {
+func renderGeneratedImages(ctx context.Context, responseFormat string, images []generatedImage, regs ...*metrics.Registry) ([]map[string]any, error) {
+	var reg *metrics.Registry
+	if len(regs) > 0 {
+		reg = regs[0]
+	}
 	out := make([]map[string]any, 0, len(images))
 	for _, img := range images {
 		if responseFormat == "b64_json" {
@@ -311,8 +317,10 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 			}
 			b64, err := fetchImageBase64(ctx, img.url)
 			if err != nil {
+				reg.IncAssetFetch(imageFetchMetricKind(err))
 				return nil, platform.UpstreamError("image fetch failed: "+err.Error(), http.StatusBadGateway, "")
 			}
+			reg.IncAssetFetch("success")
 			out = append(out, map[string]any{"b64_json": b64})
 			continue
 		}
@@ -456,6 +464,22 @@ func extractImageURLsFromMarkdown(text string) []string {
 var fetchImageLimiter = newDynamicConcurrencyLimiter()
 var fetchImageTransport http.RoundTripper = http.DefaultTransport.(*http.Transport).Clone()
 
+type imageFetchStatusError struct {
+	status int
+}
+
+func (e imageFetchStatusError) Error() string {
+	return fmt.Sprintf("image fetch returned %d", e.status)
+}
+
+type imageFetchTooLargeError struct {
+	limit int
+}
+
+func (e imageFetchTooLargeError) Error() string {
+	return fmt.Sprintf("image fetch exceeds %d bytes", e.limit)
+}
+
 type dynamicConcurrencyLimiter struct {
 	mu       sync.Mutex
 	inflight int
@@ -521,7 +545,7 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("image fetch returned %d", resp.StatusCode)
+		return "", imageFetchStatusError{status: resp.StatusCode}
 	}
 	body, err := readFetchedImageBytes(resp.Body)
 	if err != nil {
@@ -555,9 +579,30 @@ func readFetchedImageBytes(r io.Reader) ([]byte, error) {
 		return nil, err
 	}
 	if len(body) > limit {
-		return nil, fmt.Errorf("image fetch exceeds %d bytes", limit)
+		return nil, imageFetchTooLargeError{limit: limit}
 	}
 	return body, nil
+}
+
+func imageFetchMetricKind(err error) string {
+	if err == nil {
+		return "success"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "timeout"
+	}
+	var statusErr imageFetchStatusError
+	if errors.As(err, &statusErr) {
+		return "status"
+	}
+	var tooLargeErr imageFetchTooLargeError
+	if errors.As(err, &tooLargeErr) {
+		return "too_large"
+	}
+	return "request_error"
 }
 
 // --- Video jobs (async) ---
