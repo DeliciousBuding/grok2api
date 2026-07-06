@@ -223,8 +223,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			s.writeWSImageGenerationEmptyOutput(c, spec.ModelName, lease)
 			return
 		}
-		s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
-		writeAppError(c, err)
+		s.writeWSImageGenerationPostProcessFailure(c, spec.ModelName, lease, err)
 		return
 	}
 	s.writeWSImageGenerationSuccess(spec.ModelName, lease)
@@ -233,6 +232,14 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 
 func (s *Server) writeWSImageGenerationSuccess(modelName string, lease *account.Lease) {
 	s.metricsRegistry().IncUpstreamStatus("image_ws", modelName, http.StatusOK)
+	if lease != nil {
+		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+	}
+}
+
+func (s *Server) writeWSImageGenerationPostProcessFailure(c *gin.Context, modelName string, lease *account.Lease, err error) {
+	s.metricsRegistry().IncUpstreamStatus("image_ws", modelName, metricStatusCode(err))
+	writeAppError(c, err)
 	if lease != nil {
 		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 	}
