@@ -535,6 +535,15 @@ Replaces all tokens in one or more pools. Pool names must be valid and each pool
 | `POST` | `/admin/api/batch/refresh` | Trigger quota refresh |
 | `POST` | `/admin/api/batch/cache-clear` | Clear all caches |
 
+Batch endpoints accept a bounded `concurrency` query parameter. Invalid, zero, or oversized values return HTTP 400 with `invalid_concurrency`.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `concurrency` | `50` | `80` | Positive worker concurrency for batch operations |
+| `enabled` | `true` | — | `POST /admin/api/batch/nsfw` only; accepts `true`, `false`, `1`, or `0` |
+
+`POST /admin/api/batch/cache-clear` requires at least one valid token before it checks the refresh service. Empty token lists return HTTP 400 instead of a server-side availability error.
+
 ### Status & Sync
 
 | Method | Path | Description |
@@ -561,6 +570,22 @@ Replaces all tokens in one or more pools. Pool names must be valid and each pool
 | `POST` | `/admin/api/cache/clear` | Clear all cache |
 | `POST` | `/admin/api/cache/item/delete` | Delete a cache item |
 | `POST` | `/admin/api/cache/items/delete` | Delete multiple items |
+
+Cache-management endpoints accept only `image` or `video` for `type` / `cache_type`; invalid values return HTTP 400 with `invalid_cache_type`.
+
+#### `GET /admin/api/cache/list`
+
+Lists cached media files with bounded pagination.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `type` / `cache_type` | `image` | — | `image` or `video` |
+| `page` | `1` | — | Positive page number |
+| `page_size` | `1000` | `1000` | Positive page size; larger values return `invalid_page_size` |
+
+The response includes `pagination` metadata with `page`, `page_size`, `total`, `total_pages`, and `has_more`.
+
+`POST /admin/api/cache/clear` may omit the JSON body to clear image cache by default, but malformed JSON returns HTTP 400 instead of being ignored.
 
 ---
 
@@ -701,17 +726,16 @@ All errors follow this format:
 {
   "error": {
     "message": "Description of what went wrong",
-    "type": "validation_error",
+    "type": "invalid_request_error",
     "code": "model_not_found",
-    "param": "model",
-    "status": 400
+    "param": "model"
   }
 }
 ```
 
 | Error Type | HTTP Status | Common Causes |
 |---|---|---|
-| `validation_error` | 400 | Invalid model, missing required fields, bad JSON |
+| `invalid_request_error` | 400 | Invalid model, missing required fields, bad JSON |
 | `authentication_error` | 401 | Missing or invalid API key |
 | `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |
 | `upstream_error` | 502 | Grok upstream returned an error |

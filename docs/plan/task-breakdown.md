@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:32
+最后更新：2026-07-06 08:19
 
 # Task Breakdown
 
@@ -49,3 +49,10 @@
 - [x] Reject invalid admin list query values with structured 400 responses.
 - [x] Reject invalid pool replacement names and malformed pool payloads.
 - [x] Add focused admin API regression tests and public API documentation.
+
+## Phase 8: Admin Batch/Cache Guardrails
+
+- [x] Reject invalid batch `concurrency` and `enabled` query values before starting work.
+- [x] Reject empty batch cache-clear token lists before service-availability checks.
+- [x] Reject invalid cache `type` / `cache_type` values across cache list and mutation endpoints.
+- [x] Add bounded cache-list pagination metadata and negative-case regression tests.

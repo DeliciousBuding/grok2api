@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:32
+最后更新：2026-07-06 08:19
 
 # Risk Assessment
 
@@ -33,10 +33,12 @@
 - `cmd/load-smoke` provides a dependency-free load gate with error-rate and p95 thresholds.
 - Admin token listing now has bounded pagination, query validation, and pagination metadata.
 - Admin pool replacement rejects invalid pool names and malformed pool payloads instead of silently ignoring them.
+- Admin batch endpoints now reject invalid `concurrency` and `enabled` query values before starting work.
+- Admin cache-management endpoints now reject invalid cache types, malformed JSON, and oversized cache-list pagination.
 
 ## Remaining Risks
 
 - External dashboards and alert rules are still deployment-specific.
 - Chaos/failure simulation beyond load smoke is still future work.
-- Some lower-traffic admin batch/cache endpoints still need deeper negative-case tests.
+- Asset-management endpoints still need deeper pagination and destructive-operation failure-mode tests.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.

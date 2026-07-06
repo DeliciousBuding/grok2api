@@ -468,6 +468,124 @@ func TestAdminTokensReplaceRejectsMalformedPoolPayload(t *testing.T) {
 	}
 }
 
+func TestAdminBatchRejectsInvalidQueryValues(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name string
+		path string
+		code string
+	}{
+		{name: "bad concurrency", path: "/admin/api/batch/nsfw?concurrency=zero", code: "invalid_concurrency"},
+		{name: "low concurrency", path: "/admin/api/batch/nsfw?concurrency=0", code: "invalid_concurrency"},
+		{name: "high concurrency", path: "/admin/api/batch/nsfw?concurrency=81", code: "invalid_concurrency"},
+		{name: "enabled enum", path: "/admin/api/batch/nsfw?enabled=maybe", code: "invalid_enabled"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(`{"tokens":[]}`))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestAdminBatchCacheClearRejectsEmptyTokensBeforeRefreshCheck(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/batch/cache-clear", strings.NewReader(`{"tokens":[]}`))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_value") {
+		t.Fatalf("expected token validation error, got %s", w.Body.String())
+	}
+}
+
+func TestAdminCacheListRejectsInvalidQueryValues(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name string
+		path string
+		code string
+	}{
+		{name: "type", path: "/admin/api/cache/list?type=audio", code: "invalid_cache_type"},
+		{name: "page", path: "/admin/api/cache/list?page=0", code: "invalid_page"},
+		{name: "page size", path: "/admin/api/cache/list?page_size=1001", code: "invalid_page_size"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			req.Header.Set("Authorization", "Bearer admin")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestAdminCacheMutationsRejectInvalidTypeAndJSON(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		path   string
+		body   string
+		code   string
+		status int
+	}{
+		{name: "clear bad json", path: "/admin/api/cache/clear", body: `{`, code: "invalid_value", status: http.StatusBadRequest},
+		{name: "clear invalid type", path: "/admin/api/cache/clear", body: `{"type":"audio"}`, code: "invalid_cache_type", status: http.StatusBadRequest},
+		{name: "item invalid type", path: "/admin/api/cache/item/delete", body: `{"type":"audio","name":"a.jpg"}`, code: "invalid_cache_type", status: http.StatusBadRequest},
+		{name: "items invalid type", path: "/admin/api/cache/items/delete", body: `{"type":"audio","names":["a.jpg"]}`, code: "invalid_cache_type", status: http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != tc.status {
+				t.Fatalf("expected %d, got %d body=%s", tc.status, w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
 func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
 	t.Helper()
 	body := &bytes.Buffer{}

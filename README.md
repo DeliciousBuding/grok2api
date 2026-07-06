@@ -291,6 +291,10 @@ curl http://localhost:8000/admin/api/tokens \
 curl "http://localhost:8000/admin/api/tokens?page=1&page_size=50" \
   -H "Authorization: Bearer grok2api"
 
+# 分页查看本地缓存（type=image|video，page_size 最大 1000）
+curl "http://localhost:8000/admin/api/cache/list?type=image&page=1&page_size=100" \
+  -H "Authorization: Bearer grok2api"
+
 # 更新配置
 curl -X POST http://localhost:8000/admin/api/config \
   -H "Authorization: Bearer grok2api" \

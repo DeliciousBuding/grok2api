@@ -160,6 +160,13 @@ func readJSON(c *gin.Context, v any) error {
 	return nil
 }
 
+func readOptionalJSON(c *gin.Context, v any) error {
+	if c.Request == nil || c.Request.Body == nil || c.Request.ContentLength == 0 {
+		return nil
+	}
+	return readJSON(c, v)
+}
+
 // corsMiddleware adds permissive CORS headers.
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {

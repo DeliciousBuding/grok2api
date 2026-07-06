@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:32
+最后更新：2026-07-06 08:19
 
 # Dependency Graph
 
@@ -11,4 +11,5 @@ graph TD
   P4 --> P5["Phase 5: Release Hardening"]
   P5 --> P6["Phase 6: Runtime Resilience"]
   P6 --> P7["Phase 7: Admin API Validation"]
+  P7 --> P8["Phase 8: Admin Batch/Cache Guardrails"]
 ```
