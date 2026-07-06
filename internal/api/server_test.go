@@ -1106,6 +1106,20 @@ func TestRenderGeneratedImagesRejectsURLResponseWithoutURL(t *testing.T) {
 	}
 }
 
+func TestBuildWSImageChatContentRejectsEmptyOutput(t *testing.T) {
+	_, err := buildWSImageChatContent(nil)
+	if err == nil {
+		t.Fatal("expected empty WS image chat output to fail")
+	}
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected AppError, got %T %[1]v", err)
+	}
+	if appErr.Status != http.StatusBadGateway || appErr.Code != "upstream_error" {
+		t.Fatalf("expected 502 upstream_error, got status=%d code=%s", appErr.Status, appErr.Code)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

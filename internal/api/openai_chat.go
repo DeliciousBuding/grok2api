@@ -635,13 +635,13 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		}
 	}
 
-	text := ""
-	if len(imageURLs) > 0 {
-		var mds []string
-		for _, u := range imageURLs {
-			mds = append(mds, "![image]("+u+")")
-		}
-		text = strings.Join(mds, "\n\n")
+	text, err := buildWSImageChatContent(imageURLs)
+	if err != nil {
+		s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)
+		s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
+		writeAppError(c, err)
+		s.feedbackError(lease.Token, err, lease.ModeID)
+		return
 	}
 	thinking := ""
 	if len(thinkingUpdates) > 0 {
@@ -654,6 +654,20 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 	_, _ = c.Writer.Write(b)
 	s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusOK)
 	s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+}
+
+func buildWSImageChatContent(imageURLs []string) (string, error) {
+	mds := make([]string, 0, len(imageURLs))
+	for _, u := range imageURLs {
+		if u == "" {
+			continue
+		}
+		mds = append(mds, "![image]("+u+")")
+	}
+	if len(mds) == 0 {
+		return "", platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+	}
+	return strings.Join(mds, "\n\n"), nil
 }
 
 // extractImagePrompt extracts the text prompt from chat messages.
