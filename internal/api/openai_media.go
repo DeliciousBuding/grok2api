@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -562,13 +563,100 @@ func extractImageURLsFromMarkdown(text string) []string {
 var fetchImageLimiter = newDynamicConcurrencyLimiter()
 var fetchImageTransport http.RoundTripper = newFetchImageTransport()
 
+type fetchImageResolver func(context.Context, string) ([]netip.Addr, error)
+type fetchImageDialer func(context.Context, string, string) (net.Conn, error)
+
+var blockedFetchImageAddrPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),
+	netip.MustParsePrefix("100.64.0.0/10"),
+	netip.MustParsePrefix("192.0.0.0/24"),
+	netip.MustParsePrefix("192.0.2.0/24"),
+	netip.MustParsePrefix("198.18.0.0/15"),
+	netip.MustParsePrefix("198.51.100.0/24"),
+	netip.MustParsePrefix("203.0.113.0/24"),
+	netip.MustParsePrefix("240.0.0.0/4"),
+	netip.MustParsePrefix("::/128"),
+	netip.MustParsePrefix("64:ff9b:1::/48"),
+	netip.MustParsePrefix("100::/64"),
+	netip.MustParsePrefix("2001::/23"),
+	netip.MustParsePrefix("2001:db8::/32"),
+	netip.MustParsePrefix("2002::/16"),
+}
+
 func newFetchImageTransport() *http.Transport {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.MaxIdleConnsPerHost = defaultFetchImageMaxIdleConnsPerHost
 	if tr.MaxIdleConns < tr.MaxIdleConnsPerHost {
 		tr.MaxIdleConns = tr.MaxIdleConnsPerHost
 	}
+	baseDial := tr.DialContext
+	if baseDial == nil {
+		baseDial = (&net.Dialer{}).DialContext
+	}
+	tr.DialContext = fetchImageDialContext(resolveFetchImageHost, baseDial)
 	return tr
+}
+
+func resolveFetchImageHost(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+}
+
+func fetchImageDialContext(resolve fetchImageResolver, dial fetchImageDialer) fetchImageDialer {
+	if resolve == nil {
+		resolve = resolveFetchImageHost
+	}
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(address)
+		if err != nil {
+			return nil, imageFetchBlockedError{reason: "invalid dial address"}
+		}
+		hostForIP := stripFetchImageZone(host)
+		if addr, err := netip.ParseAddr(hostForIP); err == nil {
+			addr = addr.Unmap()
+			if err := validateFetchImageAddr(addr); err != nil {
+				return nil, err
+			}
+			return dial(ctx, network, net.JoinHostPort(addr.String(), port))
+		}
+
+		addrs, err := resolve(ctx, host)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateFetchImageAddrs(addrs); err != nil {
+			return nil, err
+		}
+		var lastErr error
+		for _, addr := range addrs {
+			addr = addr.Unmap()
+			if !fetchImageAddrMatchesNetwork(addr, network) {
+				continue
+			}
+			conn, err := dial(ctx, network, net.JoinHostPort(addr.String(), port))
+			if err == nil {
+				return conn, nil
+			}
+			lastErr = err
+		}
+		if lastErr != nil {
+			return nil, lastErr
+		}
+		return nil, imageFetchBlockedError{reason: "no compatible public address"}
+	}
+}
+
+func fetchImageAddrMatchesNetwork(addr netip.Addr, network string) bool {
+	switch network {
+	case "tcp4":
+		return addr.Is4()
+	case "tcp6":
+		return addr.Is6()
+	default:
+		return true
+	}
 }
 
 type imageFetchStatusError struct {
@@ -742,13 +830,40 @@ func validateParsedFetchImageURL(u *url.URL) error {
 	if lowerHost == "localhost" || strings.HasSuffix(lowerHost, ".localhost") {
 		return imageFetchBlockedError{reason: "local host"}
 	}
-	if i := strings.IndexByte(host, '%'); i >= 0 {
-		host = host[:i]
+	if addr, err := netip.ParseAddr(stripFetchImageZone(host)); err == nil {
+		return validateFetchImageAddr(addr)
 	}
-	if addr, err := netip.ParseAddr(host); err == nil {
-		addr = addr.Unmap()
-		if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() ||
-			addr.IsLinkLocalMulticast() || addr.IsMulticast() || addr.IsUnspecified() {
+	return nil
+}
+
+func stripFetchImageZone(host string) string {
+	if i := strings.IndexByte(host, '%'); i >= 0 {
+		return host[:i]
+	}
+	return host
+}
+
+func validateFetchImageAddrs(addrs []netip.Addr) error {
+	if len(addrs) == 0 {
+		return imageFetchBlockedError{reason: "empty dns result"}
+	}
+	for _, addr := range addrs {
+		if err := validateFetchImageAddr(addr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateFetchImageAddr(addr netip.Addr) error {
+	addr = addr.Unmap()
+	if !addr.IsValid() || !addr.IsGlobalUnicast() || addr.IsLoopback() || addr.IsPrivate() ||
+		addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsMulticast() ||
+		addr.IsUnspecified() {
+		return imageFetchBlockedError{reason: "non-public ip"}
+	}
+	for _, prefix := range blockedFetchImageAddrPrefixes {
+		if prefix.Contains(addr) {
 			return imageFetchBlockedError{reason: "non-public ip"}
 		}
 	}

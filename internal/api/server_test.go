@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1596,6 +1598,8 @@ func TestValidateFetchImageURLRejectsUnsafeDestinations(t *testing.T) {
 		"http://localhost/image.png",
 		"http://127.0.0.1/image.png",
 		"http://10.0.0.5/image.png",
+		"http://100.64.0.5/image.png",
+		"http://198.51.100.5/image.png",
 		"http://[::1]/image.png",
 	}
 	for _, raw := range cases {
@@ -1608,6 +1612,52 @@ func TestValidateFetchImageURLRejectsUnsafeDestinations(t *testing.T) {
 
 	if err := validateFetchImageURL("https://assets.grok.com/generated.png"); err != nil {
 		t.Fatalf("expected public Grok asset URL to be accepted: %v", err)
+	}
+}
+
+func TestFetchImageDialContextDialsResolvedPublicAddress(t *testing.T) {
+	resolver := func(ctx context.Context, host string) ([]netip.Addr, error) {
+		if host != "assets.example" {
+			t.Fatalf("unexpected resolver host %q", host)
+		}
+		return []netip.Addr{netip.MustParseAddr("93.184.216.34")}, nil
+	}
+	var dialAddress string
+	dial := fetchImageDialContext(resolver, func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialAddress = address
+		return nil, nil
+	})
+
+	if _, err := dial(context.Background(), "tcp", "assets.example:443"); err != nil {
+		t.Fatalf("expected public DNS result to dial: %v", err)
+	}
+	if dialAddress != "93.184.216.34:443" {
+		t.Fatalf("expected dial to use resolved IP literal, got %q", dialAddress)
+	}
+}
+
+func TestFetchImageDialContextBlocksDNSResolvedPrivateAddress(t *testing.T) {
+	resolver := func(ctx context.Context, host string) ([]netip.Addr, error) {
+		if host != "attacker.example" {
+			t.Fatalf("unexpected resolver host %q", host)
+		}
+		return []netip.Addr{netip.MustParseAddr("10.0.0.5")}, nil
+	}
+	dialed := false
+	dial := fetchImageDialContext(resolver, func(ctx context.Context, network, address string) (net.Conn, error) {
+		dialed = true
+		return nil, errors.New("dial should not run")
+	})
+
+	_, err := dial(context.Background(), "tcp", "attacker.example:443")
+	if err == nil {
+		t.Fatal("expected DNS-resolved private address to be blocked")
+	}
+	if got := imageFetchMetricKind(err); got != "blocked" {
+		t.Fatalf("expected blocked metric kind, got %q from %v", got, err)
+	}
+	if dialed {
+		t.Fatal("unsafe DNS result must be rejected before dialing")
 	}
 }
 
