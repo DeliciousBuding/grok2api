@@ -140,7 +140,7 @@ func (s *Server) handleImageGenerations(c *gin.Context) {
 	for i := 0; i < n && i < len(imageURLs); i++ {
 		url := imageURLs[i]
 		if responseFormat == "b64_json" {
-			b64, err := fetchImageBase64(url)
+			b64, err := fetchImageBase64(c.Request.Context(), url)
 			if err == nil {
 				out = append(out, map[string]any{"b64_json": b64})
 				continue
@@ -216,7 +216,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			if img.blob != "" {
 				out = append(out, map[string]any{"b64_json": img.blob})
 			} else if img.url != "" {
-				b64, err := fetchImageBase64(img.url)
+				b64, err := fetchImageBase64(c.Request.Context(), img.url)
 				if err == nil {
 					out = append(out, map[string]any{"b64_json": b64})
 					continue
@@ -300,7 +300,7 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 	out := []map[string]any{}
 	for _, url := range imageURLs {
 		if responseFormat == "b64_json" {
-			b64, err := fetchImageBase64(url)
+			b64, err := fetchImageBase64(c.Request.Context(), url)
 			if err == nil {
 				out = append(out, map[string]any{"b64_json": b64})
 				continue
@@ -431,9 +431,16 @@ func extractImageURLsFromMarkdown(text string) []string {
 }
 
 // fetchImageBase64 downloads the image bytes and returns the base64 encoding.
-func fetchImageBase64(url string) (string, error) {
+func fetchImageBase64(ctx context.Context, url string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
