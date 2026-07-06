@@ -35,3 +35,15 @@ func TestReadUpstreamResponseBodyUsesDefaultLimitWhenUnconfigured(t *testing.T) 
 		t.Fatal("expected default upstream response limit to reject oversized body")
 	}
 }
+
+func TestReadUpstreamErrorBodyUsesSmallBoundedSample(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: http.StatusBadGateway,
+		Body:       io.NopCloser(strings.NewReader(strings.Repeat("x", defaultUpstreamMaxErrorBytes+1))),
+	}
+
+	body := readUpstreamErrorBody(resp)
+	if len(body) != defaultUpstreamMaxErrorBytes {
+		t.Fatalf("expected error body sample size %d, got %d", defaultUpstreamMaxErrorBytes, len(body))
+	}
+}
