@@ -152,6 +152,11 @@ func (r *idleLineScanner) Next(ctx context.Context) (string, bool, error) {
 	if r.done {
 		return "", false, nil
 	}
+	if err := ctx.Err(); err != nil {
+		r.Close()
+		r.done = true
+		return "", false, err
+	}
 	if r.idle <= 0 {
 		if r.scanner.Scan() {
 			return r.scanner.Text(), true, nil

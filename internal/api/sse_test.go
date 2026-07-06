@@ -2,8 +2,10 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,5 +30,21 @@ func TestIdleLineScannerReturnsStreamIdleTimeout(t *testing.T) {
 	}
 	if appErr.Code != "stream_idle_timeout" || appErr.Status != 504 {
 		t.Fatalf("expected stream idle timeout, got code=%s status=%d", appErr.Code, appErr.Status)
+	}
+}
+
+func TestIdleLineScannerHonorsCanceledContextWhenIdleDisabled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	scanner := bufio.NewScanner(strings.NewReader("data: still-buffered\n"))
+	reader := newIdleLineScanner(scanner, io.NopCloser(strings.NewReader("")), 0)
+
+	line, ok, err := reader.Next(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got line=%q ok=%v err=%v", line, ok, err)
+	}
+	if ok {
+		t.Fatal("canceled scanner should not return buffered lines")
 	}
 }
