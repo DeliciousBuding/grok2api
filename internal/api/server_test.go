@@ -916,6 +916,21 @@ func TestShouldRecordUpstreamStatusSkipsLocalCancellation(t *testing.T) {
 	}
 }
 
+func TestStreamResponseErrorPreservesAppErrorStatus(t *testing.T) {
+	err := markStreamResponseError(platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
+
+	if !isStreamResponseError(err) {
+		t.Fatalf("expected stream response error marker, got %T %[1]v", err)
+	}
+	if got := metricStatusCode(err); got != http.StatusTooManyRequests {
+		t.Fatalf("expected wrapped stream error to preserve status 429, got %d", got)
+	}
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) || appErr.Status != http.StatusTooManyRequests {
+		t.Fatalf("expected errors.As to expose AppError 429, got %T %[1]v", err)
+	}
+}
+
 type apiBlockingQuotaFetcher struct {
 	started chan string
 	release chan struct{}

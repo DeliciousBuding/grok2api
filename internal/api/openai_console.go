@@ -73,6 +73,9 @@ func (s *Server) runConsoleChatWithRetry(c *gin.Context, req *chatCompletionRequ
 			s.metricsRegistry().IncUpstreamStatus("console", req.Model, status)
 		}
 		s.feedbackError(lease.Token, err, lease.ModeID)
+		if isStreamResponseError(err) {
+			return
+		}
 		lastErr = err
 		if !shouldRetryAttempt(err, attempt, maxRetries) {
 			writeAppError(c, err)
@@ -125,7 +128,7 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 			line, ok, err := lines.Next(ctx)
 			if err != nil {
 				sw.writeOpenAIAppError(err)
-				return nil
+				return markStreamResponseError(err)
 			}
 			if !ok {
 				break
@@ -144,7 +147,7 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 			tokens, errObj := adapter.Feed(currentEvent, value)
 			if errObj != nil {
 				sw.writeOpenAIError(errObj.Message, string(errObj.Kind), errObj.Code, errObj.Param)
-				return nil
+				return markStreamResponseError(errObj)
 			}
 			for _, tok := range tokens {
 				chunk := makeStreamChunk(completionID, created, req.Model, tok, "", false)

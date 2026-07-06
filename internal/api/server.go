@@ -34,6 +34,33 @@ type Server struct {
 	adminBackground chan struct{}
 }
 
+type streamResponseError struct {
+	err error
+}
+
+func (e streamResponseError) Error() string {
+	if e.err == nil {
+		return "stream response error"
+	}
+	return e.err.Error()
+}
+
+func (e streamResponseError) Unwrap() error {
+	return e.err
+}
+
+func markStreamResponseError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return streamResponseError{err: err}
+}
+
+func isStreamResponseError(err error) bool {
+	var streamErr streamResponseError
+	return errors.As(err, &streamErr)
+}
+
 // NewServer constructs a Server bound to the given dependencies.
 func NewServer(repo account.Repository, dir *account.Directory, refresh *account.RefreshService, transport *grok.Transport, media *storage.LocalMediaCacheStore) *Server {
 	return &Server{

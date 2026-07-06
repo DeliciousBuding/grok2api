@@ -157,6 +157,9 @@ func (s *Server) runGrokChatWithRetry(c *gin.Context, req *chatCompletionRequest
 			s.metricsRegistry().IncUpstreamStatus("chat", req.Model, status)
 		}
 		s.feedbackError(lease.Token, err, lease.ModeID)
+		if isStreamResponseError(err) {
+			return
+		}
 		lastErr = err
 		if !shouldRetryAttempt(err, attempt, maxRetries) {
 			writeAppError(c, err)
@@ -212,7 +215,7 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 			line, ok, err := lines.Next(ctx)
 			if err != nil {
 				sw.writeOpenAIAppError(err)
-				return nil
+				return markStreamResponseError(err)
 			}
 			if !ok {
 				break
@@ -227,7 +230,7 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 			events, errObj := adapter.Feed([]byte(data))
 			if errObj != nil {
 				sw.writeOpenAIError(errObj.Message, string(errObj.Kind), errObj.Code, errObj.Param)
-				return nil
+				return markStreamResponseError(errObj)
 			}
 			for _, ev := range events {
 				switch ev.Kind {
