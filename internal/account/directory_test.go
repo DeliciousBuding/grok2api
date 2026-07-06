@@ -156,6 +156,35 @@ func TestQuotaSelectionRespectsConfiguredMaxInflight(t *testing.T) {
 	}
 }
 
+func TestReserveAnyUsesQuotaStrategyModeBuckets(t *testing.T) {
+	dir := NewDirectory(nil)
+	dir.SetMaxInflight(1)
+
+	reset := int64(9999999999999)
+	slot := directoryTestSlot("tok-any", PoolBasic, 1, 30, reset, nil)
+	dir.slots = map[string]*Slot{slot.Token: slot}
+	dir.byMode = map[modeKey]map[string]struct{}{
+		{pool: PoolBasic, modeID: 1}: {slot.Token: struct{}{}},
+	}
+
+	lease := dir.ReserveAny([]int{int(PoolBasic)}, nil)
+	if lease == nil {
+		t.Fatal("ReserveAny should select an account with any available quota mode")
+	}
+	if lease.Token != slot.Token {
+		t.Fatalf("expected token %q, got %q", slot.Token, lease.Token)
+	}
+	if lease.ModeID != 1 {
+		t.Fatalf("expected selected mode 1, got %d", lease.ModeID)
+	}
+	if slot.Inflight != 1 {
+		t.Fatalf("expected inflight lease count 1, got %d", slot.Inflight)
+	}
+	if lease := dir.ReserveAny([]int{int(PoolBasic)}, nil); lease != nil {
+		t.Fatalf("second ReserveAny should respect max inflight, got %#v", lease)
+	}
+}
+
 func TestSetMaxInflightIgnoresInvalidValues(t *testing.T) {
 	dir := NewDirectory(nil)
 	dir.SetMaxInflight(0)

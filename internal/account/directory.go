@@ -212,8 +212,13 @@ func (d *Directory) Reserve(poolCandidates []int, modeID int, excludeTokens []st
 	}
 	for _, poolID := range poolCandidates {
 		var chosen *Slot
+		selected := modeID
 		if d.strategy == StrategyQuota {
-			chosen = d.quotaSelectLocked(poolID, modeID, exclude, prefer, nowMs)
+			if modeID == -1 {
+				chosen, selected = d.quotaSelectAnyLocked(poolID, exclude, prefer, nowMs)
+			} else {
+				chosen = d.quotaSelectLocked(poolID, modeID, exclude, prefer, nowMs)
+			}
 		} else {
 			chosen = d.randomSelectLocked(poolID, modeID, exclude, prefer, nowSec)
 		}
@@ -221,8 +226,7 @@ func (d *Directory) Reserve(poolCandidates []int, modeID int, excludeTokens []st
 			chosen.Inflight++
 			chosen.LastUseAt = nowMs
 			d.leaseSeq++
-			selected := modeID
-			if modeID == -1 {
+			if modeID == -1 && selected == -1 {
 				// reserve_any: pick the first supported mode the account has quota for.
 				for _, m := range SupportedModeIDs(chosen.PoolID.Name()) {
 					if w := chosen.Quota.Get(m); w != nil && w.WindowSeconds > 0 {
@@ -293,6 +297,67 @@ func (d *Directory) quotaSelectLocked(poolID int, modeID int, exclude map[string
 		return bestPreferred
 	}
 	return bestAny
+}
+
+func (d *Directory) quotaSelectAnyLocked(poolID int, exclude map[string]struct{}, prefer tagPreference, nowMs int64) (*Slot, int) {
+	nowSec := nowMs / 1000
+	var bestAny *Slot
+	bestAnyMode := -1
+	bestAnyScore := 0.0
+	hasBestAny := false
+	var bestPreferred *Slot
+	bestPreferredMode := -1
+	bestPreferredScore := 0.0
+	hasBestPreferred := false
+	seen := map[string]map[int]struct{}{}
+	for _, modeID := range SupportedModeIDs(PoolID(poolID).Name()) {
+		for tok := range d.byMode[modeKey{PoolID(poolID), modeID}] {
+			if _, skip := exclude[tok]; skip {
+				continue
+			}
+			if seen[tok] == nil {
+				seen[tok] = map[int]struct{}{}
+			}
+			if _, duplicate := seen[tok][modeID]; duplicate {
+				continue
+			}
+			seen[tok][modeID] = struct{}{}
+			s := d.slots[tok]
+			if s == nil {
+				continue
+			}
+			w := s.Quota.Get(modeID)
+			if w == nil {
+				continue
+			}
+			if w.IsWindowExpired(nowMs) {
+				w.Remaining = w.Total
+				reset := nowMs + int64(w.WindowSeconds)*1000
+				w.ResetAt = &reset
+				s.Quota.Set(modeID, *w)
+			}
+			if w.Remaining <= 0 || s.Inflight >= d.maxInflight {
+				continue
+			}
+			score := quotaScore(s, w.Remaining, nowSec)
+			if !hasBestAny || score > bestAnyScore {
+				bestAny = s
+				bestAnyMode = modeID
+				bestAnyScore = score
+				hasBestAny = true
+			}
+			if prefer.matches(s) && (!hasBestPreferred || score > bestPreferredScore) {
+				bestPreferred = s
+				bestPreferredMode = modeID
+				bestPreferredScore = score
+				hasBestPreferred = true
+			}
+		}
+	}
+	if hasBestPreferred {
+		return bestPreferred, bestPreferredMode
+	}
+	return bestAny, bestAnyMode
 }
 
 func quotaScore(s *Slot, remaining int, nowSec int64) float64 {
