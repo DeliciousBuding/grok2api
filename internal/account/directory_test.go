@@ -222,6 +222,44 @@ func TestDirectorySyncAdvancesRevisionOnNoopRepositoryChange(t *testing.T) {
 	}
 }
 
+func TestDirectorySnapshotReturnsIsolatedSlots(t *testing.T) {
+	dir := NewDirectory(nil)
+	reset := int64(9999999999999)
+	slot := directoryTestSlot("tok-isolated", PoolBasic, 1, 30, reset, []string{"tenant-a"})
+	slot.Quota.Set(3, QuotaWindow{
+		Total:         10,
+		Remaining:     10,
+		WindowSeconds: 7200,
+		ResetAt:       &reset,
+	})
+	dir.slots = map[string]*Slot{slot.Token: slot}
+
+	snap := dir.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected one slot, got %d", len(snap))
+	}
+	snap[0].FailCount = 99
+	snap[0].Health = 0.01
+	snap[0].Tags[0] = "mutated"
+	if w := snap[0].Quota.Get(3); w != nil {
+		w.Remaining = 0
+	}
+
+	got := dir.Snapshot()[0]
+	if got.FailCount != 0 {
+		t.Fatalf("snapshot mutation leaked fail count into directory: %d", got.FailCount)
+	}
+	if got.Health != 1.0 {
+		t.Fatalf("snapshot mutation leaked health into directory: %v", got.Health)
+	}
+	if got.Tags[0] != "tenant-a" {
+		t.Fatalf("snapshot mutation leaked tags into directory: %v", got.Tags)
+	}
+	if w := got.Quota.Get(3); w == nil || w.Remaining != 10 {
+		t.Fatalf("snapshot mutation leaked quota into directory: %#v", w)
+	}
+}
+
 func directoryTestSlot(token string, pool PoolID, modeID int, remaining int, reset int64, tags []string) *Slot {
 	quota := QuotaSet{}
 	quota.Set(modeID, QuotaWindow{

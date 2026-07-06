@@ -544,10 +544,52 @@ func (d *Directory) Snapshot() []*Slot {
 	defer d.mu.Unlock()
 	out := make([]*Slot, 0, len(d.slots))
 	for _, s := range d.slots {
-		out = append(out, s)
+		out = append(out, cloneSlot(s))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Token < out[j].Token })
 	return out
+}
+
+func cloneSlot(s *Slot) *Slot {
+	if s == nil {
+		return nil
+	}
+	cp := *s
+	cp.Quota = cloneQuotaSet(s.Quota)
+	cp.Tags = append([]string(nil), s.Tags...)
+	return &cp
+}
+
+func cloneQuotaSet(q QuotaSet) QuotaSet {
+	return QuotaSet{
+		Auto:    cloneQuotaWindow(q.Auto),
+		Fast:    cloneQuotaWindow(q.Fast),
+		Expert:  cloneQuotaWindow(q.Expert),
+		Heavy:   cloneOptionalQuotaWindow(q.Heavy),
+		Grok43:  cloneOptionalQuotaWindow(q.Grok43),
+		Console: cloneOptionalQuotaWindow(q.Console),
+	}
+}
+
+func cloneOptionalQuotaWindow(w *QuotaWindow) *QuotaWindow {
+	if w == nil {
+		return nil
+	}
+	cp := cloneQuotaWindow(*w)
+	return &cp
+}
+
+func cloneQuotaWindow(w QuotaWindow) QuotaWindow {
+	cp := w
+	if w.ResetAt != nil {
+		v := *w.ResetAt
+		cp.ResetAt = &v
+	}
+	if w.SyncedAt != nil {
+		v := *w.SyncedAt
+		cp.SyncedAt = &v
+	}
+	return cp
 }
 
 // Size returns the number of active accounts.
