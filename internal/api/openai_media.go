@@ -420,6 +420,7 @@ func fetchImageBase64(url string) (string, error) {
 // --- Video jobs (async) ---
 
 type videoJob struct {
+	mu          sync.RWMutex
 	ID          string `json:"id"`
 	Object      string `json:"object"`
 	CreatedAt   int64  `json:"created_at"`
@@ -443,6 +444,8 @@ var (
 	videoJobsMap   = map[string]*videoJob{}
 	videoJobsMutex sync.Mutex
 )
+
+const maxVideoJobs = 1024
 
 // handleVideoCreate queues an async video job.
 func (s *Server) handleVideoCreate(c *gin.Context) {
@@ -510,13 +513,14 @@ func (s *Server) handleVideoGet(c *gin.Context) {
 	}
 	// Check if requesting content
 	if strings.HasSuffix(c.Request.URL.Path, "/content") {
-		if job.Status != "completed" || job.contentPath == "" {
+		contentPath, ok := job.contentPathIfReady()
+		if !ok {
 			writeAppError(c, platform.NewAppError("Video content is not ready yet", platform.ErrUpstream, "video_not_ready", http.StatusConflict))
 			return
 		}
 		c.Header("Content-Type", "video/mp4")
 		c.Header("Content-Disposition", `inline; filename="`+id+`.mp4"`)
-		c.File(job.contentPath)
+		c.File(contentPath)
 		return
 	}
 	c.JSON(http.StatusOK, job.toDict())
@@ -530,20 +534,13 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 	timeout := timeoutClassDuration("video", 600)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	job.Status = "in_progress"
-	job.Progress = 1
+	job.markInProgress()
 	preset := "normal"
 	promptWithFlag := prompt + " --mode=normal"
 
 	lease, _ := reserveAccount(ctx, s.Directory, spec, nil, nil)
 	if lease == nil {
-		now := time.Now().Unix()
-		job.Status = "failed"
-		job.CompletedAt = &now
-		job.Error = &struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		}{Code: "video_generation_failed", Message: "no available accounts"}
+		job.fail("no available accounts")
 		return
 	}
 	if s.Directory != nil {
@@ -585,19 +582,15 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		events, _ := adapter.Feed([]byte(data))
 		for _, ev := range events {
 			if ev.Kind == grok.EventImageProgress {
-				if n, err := parseIntStr(ev.Content); err == nil && n > job.Progress {
-					job.Progress = n
+				if n, err := parseIntStr(ev.Content); err == nil {
+					job.setProgress(n)
 				}
 			}
 		}
 	}
 
 	if len(adapter.ImageURLs) > 0 {
-		now := time.Now().Unix()
-		job.Status = "completed"
-		job.Progress = 100
-		job.CompletedAt = &now
-		job.VideoURL = adapter.ImageURLs[0][0]
+		job.complete(adapter.ImageURLs[0][0])
 		s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusOK)
 		return
 	}
@@ -606,16 +599,49 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 }
 
 func (s *Server) failVideoJob(job *videoJob, message string) {
+	job.fail(message)
+}
+
+func (j *videoJob) markInProgress() {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = "in_progress"
+	j.Progress = 1
+}
+
+func (j *videoJob) setProgress(progress int) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if progress > j.Progress {
+		j.Progress = progress
+	}
+}
+
+func (j *videoJob) complete(videoURL string) {
 	now := time.Now().Unix()
-	job.Status = "failed"
-	job.CompletedAt = &now
-	job.Error = &struct {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = "completed"
+	j.Progress = 100
+	j.CompletedAt = &now
+	j.VideoURL = videoURL
+}
+
+func (j *videoJob) fail(message string) {
+	now := time.Now().Unix()
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = "failed"
+	j.CompletedAt = &now
+	j.Error = &struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`
 	}{Code: "video_generation_failed", Message: message}
 }
 
 func (j *videoJob) toDict() map[string]any {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
 	m := map[string]any{
 		"id": j.ID, "object": j.Object, "created_at": j.CreatedAt,
 		"status": j.Status, "model": j.Model, "progress": j.Progress,
@@ -634,16 +660,47 @@ func (j *videoJob) toDict() map[string]any {
 	return m
 }
 
+func (j *videoJob) contentPathIfReady() (string, bool) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	if j.Status != "completed" || j.contentPath == "" {
+		return "", false
+	}
+	return j.contentPath, true
+}
+
+func (j *videoJob) createdAt() int64 {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.CreatedAt
+}
+
 func registerVideoJob(job *videoJob) {
 	videoJobsMutex.Lock()
 	defer videoJobsMutex.Unlock()
 	videoJobsMap[job.ID] = job
+	pruneVideoJobsLocked(maxVideoJobs)
 }
 
 func lookupVideoJob(id string) *videoJob {
 	videoJobsMutex.Lock()
 	defer videoJobsMutex.Unlock()
 	return videoJobsMap[id]
+}
+
+func pruneVideoJobsLocked(limit int) {
+	for len(videoJobsMap) > limit {
+		oldestID := ""
+		var oldestCreated int64
+		for id, job := range videoJobsMap {
+			created := job.createdAt()
+			if oldestID == "" || created < oldestCreated || (created == oldestCreated && id < oldestID) {
+				oldestID = id
+				oldestCreated = created
+			}
+		}
+		delete(videoJobsMap, oldestID)
+	}
 }
 
 func isValidVideoLength(n int) bool {
