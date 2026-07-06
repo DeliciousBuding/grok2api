@@ -1,6 +1,7 @@
 package grok
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -45,14 +46,23 @@ func NewImagineStream(token string) *ImagineStream {
 
 // StreamImages connects to the WS imagine endpoint and sends events to the
 // returned channel until *n* final images are collected or an error occurs.
-func (s *ImagineStream) StreamImages(prompt, aspectRatio string, n int, enableNSFW, enablePro bool) <-chan ImagineEvent {
+func (s *ImagineStream) StreamImages(ctx context.Context, prompt, aspectRatio string, n int, enableNSFW, enablePro bool) <-chan ImagineEvent {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	ch := make(chan ImagineEvent, 64)
 	go func() {
 		defer close(ch)
+		if err := ctx.Err(); err != nil {
+			return
+		}
 		collected := 0
 		for collected < n {
+			if err := ctx.Err(); err != nil {
+				return
+			}
 			needed := n - collected
-			wsClosed, roundCollected := s.runRounds(ch, prompt, aspectRatio, needed, enableNSFW, enablePro)
+			wsClosed, roundCollected := s.runRounds(ctx, ch, prompt, aspectRatio, needed, enableNSFW, enablePro)
 			collected += roundCollected
 			if collected >= n {
 				return
@@ -66,7 +76,10 @@ func (s *ImagineStream) StreamImages(prompt, aspectRatio string, n int, enableNS
 }
 
 // runRounds connects to the WS and runs image rounds until done or WS closes.
-func (s *ImagineStream) runRounds(ch chan<- ImagineEvent, prompt, aspectRatio string, needed int, enableNSFW, enablePro bool) (wsClosed bool, collected int) {
+func (s *ImagineStream) runRounds(ctx context.Context, ch chan<- ImagineEvent, prompt, aspectRatio string, needed int, enableNSFW, enablePro bool) (wsClosed bool, collected int) {
+	if err := ctx.Err(); err != nil {
+		return false, 0
+	}
 	headers := s.buildWSHeaders()
 	dialer := &websocket.Dialer{
 		HandshakeTimeout: 30 * time.Second,
@@ -77,15 +90,30 @@ func (s *ImagineStream) runRounds(ch chan<- ImagineEvent, prompt, aspectRatio st
 		}
 	}
 
-	conn, _, err := dialer.Dial(WSImagineURL, headers)
+	conn, _, err := dialer.DialContext(ctx, WSImagineURL, headers)
 	if err != nil {
+		if ctx.Err() != nil {
+			return false, 0
+		}
 		ch <- ImagineEvent{Type: ImagineEventError, Error: fmt.Sprintf("WS imagine connect failed: %v", err)}
 		return true, 0
 	}
 	defer conn.Close()
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-done:
+		}
+	}()
+	defer close(done)
 
 	for collected < needed {
-		wc, rc := s.runOneRound(conn, ch, prompt, aspectRatio, needed-collected, enableNSFW, enablePro)
+		if err := ctx.Err(); err != nil {
+			return false, collected
+		}
+		wc, rc := s.runOneRound(ctx, conn, ch, prompt, aspectRatio, needed-collected, enableNSFW, enablePro)
 		collected += rc
 		if collected >= needed || wc {
 			return wc, collected
@@ -96,9 +124,12 @@ func (s *ImagineStream) runRounds(ch chan<- ImagineEvent, prompt, aspectRatio st
 
 // runOneRound sends reset+prompt and processes frames until all slots
 // complete or the WS closes.
-func (s *ImagineStream) runOneRound(conn *websocket.Conn, ch chan<- ImagineEvent, prompt, aspectRatio string, needed int, enableNSFW, enablePro bool) (wsClosed bool, collected int) {
+func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, ch chan<- ImagineEvent, prompt, aspectRatio string, needed int, enableNSFW, enablePro bool) (wsClosed bool, collected int) {
 	requestID := genUUID()
 
+	if err := ctx.Err(); err != nil {
+		return false, 0
+	}
 	if err := conn.WriteJSON(BuildImagineResetMessage()); err != nil {
 		return true, 0
 	}
@@ -111,6 +142,9 @@ func (s *ImagineStream) runOneRound(conn *websocket.Conn, ch chan<- ImagineEvent
 	timeout := 120 * time.Second
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return false, collected
+		}
 		if time.Since(roundStart) >= timeout {
 			for _, slot := range slots {
 				if !slot.done && slot.lastBlob != "" {
@@ -128,6 +162,9 @@ func (s *ImagineStream) runOneRound(conn *websocket.Conn, ch chan<- ImagineEvent
 		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 		msgType, data, rerr := conn.ReadMessage()
 		if rerr != nil {
+			if ctx.Err() != nil {
+				return false, collected
+			}
 			for _, slot := range slots {
 				if !slot.done && slot.lastBlob != "" {
 					collected++
