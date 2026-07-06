@@ -86,6 +86,9 @@ func (f *UsageFetcher) FetchAllQuotas(ctx context.Context, token, _ string, _ bo
 type quotaFetchFunc func(context.Context, int) (*account.ModeQuota, error)
 
 func fetchAllQuotaModes(ctx context.Context, modes []int, fetch quotaFetchFunc) (map[int]account.ModeQuota, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	type result struct {
 		modeID int
 		quota  *account.ModeQuota

@@ -3,6 +3,7 @@ package grok
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,5 +51,23 @@ func TestFetchAllQuotaModesShortCircuitsInvalidCredentials(t *testing.T) {
 		case <-time.After(500 * time.Millisecond):
 			t.Fatalf("expected blocked mode fetch %d to observe cancellation", i+1)
 		}
+	}
+}
+
+func TestFetchAllQuotaModesSkipsFanoutWhenContextAlreadyCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var calls int32
+
+	_, err := fetchAllQuotaModes(ctx, []int{0, 1, 2, 3, 4}, func(ctx context.Context, modeID int) (*account.ModeQuota, error) {
+		atomic.AddInt32(&calls, 1)
+		return nil, ctx.Err()
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled error, got %v", err)
+	}
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("expected canceled context to skip quota fanout, got %d calls", got)
 	}
 }
