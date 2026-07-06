@@ -72,35 +72,15 @@ func (r *TxtRepository) ScanChanges(ctx context.Context, since int, limit int) (
 	defer r.mu.Unlock()
 
 	var items []*Record
-	batchMax := since
 	for _, rec := range r.accounts {
 		if rec.Revision > since {
 			items = append(items, rec)
-			if rec.Revision > batchMax {
-				batchMax = rec.Revision
-			}
 		}
 	}
 	// Sort by revision for deterministic order.
 	sort.Slice(items, func(i, j int) bool { return items[i].Revision < items[j].Revision })
 
-	hasMore := len(items) > limit
-	if hasMore {
-		items = items[:limit]
-	}
-	var deleted []string
-	for _, it := range items {
-		if it.IsDeleted() {
-			deleted = append(deleted, it.Token)
-		}
-	}
-	cs := &ChangeSet{Items: items, DeletedTokens: deleted, HasMore: hasMore, BatchMaxRev: batchMax}
-	if hasMore {
-		cs.Revision = batchMax
-	} else {
-		cs.Revision = r.revision
-	}
-	return cs, nil
+	return buildChangeSet(items, since, r.revision, limit), nil
 }
 
 func (r *TxtRepository) UpsertAccounts(ctx context.Context, items []Upsert) (*MutationResult, error) {

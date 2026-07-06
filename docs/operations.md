@@ -1,4 +1,4 @@
-最后更新：2026-07-06 09:11
+最后更新：2026-07-06 10:04
 
 # Operations Runbook
 
@@ -43,6 +43,28 @@ docker compose up -d
 ```
 
 The sample Compose file creates named volumes for `/app/data` and `/app/logs`. Put runtime configuration in `/app/data/config.toml` through the mounted data volume, not in the image.
+
+## Account Storage
+
+The default account backend is JSONL (`account.storage.backend = "text"`), stored under the data volume. It is simple to inspect and back up, but every mutation rewrites the account file.
+
+For single-node deployments with larger account pools or frequent admin mutations, use SQLite:
+
+```toml
+[account.storage]
+backend = "sqlite"
+
+[account.sqlite]
+path = "/app/data/accounts.sqlite3"
+```
+
+SQLite uses a local database with WAL mode, `synchronous=NORMAL`, and a busy timeout. Treat it as a single-active-process backend; do not point multiple running gateway instances at the same SQLite account database. Back up the database together with its `-wal` and `-shm` files if they exist.
+
+`pg+redis`, `postgres+redis`, and `postgresql+redis` are reserved distributed backend names for future multi-instance account-pool coordination. They currently fail at startup with a clear error instead of silently falling back to a local backend.
+
+Storage backend settings are startup-only. Do not expect `/admin/api/config` changes to move a running process between JSONL, SQLite, or a future distributed backend.
+
+For container-only overrides, set `ACCOUNT_STORAGE_BACKEND=sqlite` and optionally `ACCOUNT_SQLITE_PATH=/app/data/accounts.sqlite3`.
 
 ## Health Checks
 
@@ -180,7 +202,7 @@ docker run --rm \
   tar czf /backup/grok2api-data-backup.tgz -C /data .
 ```
 
-The important runtime files are account storage, user config, and local media cache under `/app/data`.
+The important runtime files are account storage, user config, and local media cache under `/app/data`. For SQLite account storage, include `accounts.sqlite3`, `accounts.sqlite3-wal`, and `accounts.sqlite3-shm` when present.
 
 ## Rollback
 
