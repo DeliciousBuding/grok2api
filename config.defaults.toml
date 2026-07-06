@@ -24,6 +24,8 @@ write_timeout_sec = 0
 idle_timeout_sec = 120
 # SIGINT/SIGTERM 后 graceful shutdown 等待时间（秒）。
 shutdown_timeout_sec = 15
+# HTTP 请求头总大小上限（字节），<=0 使用 Go 默认值 1MiB。
+max_header_bytes = 1048576
 
 # ==================== Admission Control ====================
 [admission]

@@ -62,7 +62,7 @@ SQLite uses a local database with WAL mode, `synchronous=NORMAL`, and a busy tim
 
 `pg+redis`, `postgres+redis`, and `postgresql+redis` are reserved distributed backend names for future multi-instance account-pool coordination. They currently fail at startup with a clear error instead of silently falling back to a local backend.
 
-Storage backend settings and `server.*_timeout_sec` settings are startup-only. Do not expect `/admin/api/config` changes to move a running process between JSONL, SQLite, a future distributed backend, or a different HTTP server timeout profile.
+Storage backend settings, `server.*_timeout_sec` settings, and `server.max_header_bytes` are startup-only. Do not expect `/admin/api/config` changes to move a running process between JSONL, SQLite, a future distributed backend, or a different HTTP server timeout/header-size profile.
 
 For container-only overrides, set `ACCOUNT_STORAGE_BACKEND=sqlite` and optionally `ACCOUNT_SQLITE_PATH=/app/data/accounts.sqlite3`.
 
@@ -101,6 +101,7 @@ read_timeout_sec = 0
 write_timeout_sec = 0
 idle_timeout_sec = 120
 shutdown_timeout_sec = 15
+max_header_bytes = 1048576
 
 [admission]
 global_max_inflight = 64
@@ -128,7 +129,7 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
-`server.read_header_timeout_sec`, `server.read_timeout_sec`, `server.write_timeout_sec`, and `server.idle_timeout_sec` tune the public HTTP server's connection-level deadlines. Keep `server.write_timeout_sec = 0` for long streaming deployments unless an outer proxy enforces stream-safe write deadlines. `server.shutdown_timeout_sec` bounds graceful shutdown after SIGINT/SIGTERM.
+`server.read_header_timeout_sec`, `server.read_timeout_sec`, `server.write_timeout_sec`, and `server.idle_timeout_sec` tune the public HTTP server's connection-level deadlines. Keep `server.write_timeout_sec = 0` for long streaming deployments unless an outer proxy enforces stream-safe write deadlines. `server.shutdown_timeout_sec` bounds graceful shutdown after SIGINT/SIGTERM. `server.max_header_bytes` bounds aggregate request-header memory before routing or authentication.
 
 `asset.max_download_bytes` caps remote image/file downloads before they are re-uploaded to the upstream service. Values less than or equal to zero use the built-in 30MiB safety default.
 

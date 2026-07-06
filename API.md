@@ -496,7 +496,7 @@ Mutating admin endpoints emit an `admin_audit` log event after each request. Eve
 | `GET` | `/admin/api/config` | Get current config |
 | `POST` | `/admin/api/config` | Update config (persisted to user config file) |
 
-Startup-only keys cannot be changed through `POST /admin/api/config`: `account.storage.*`, `account.local.*`, `account.sqlite.*`, `account.postgresql.*`, `account.redis.*`, and `server.*_timeout_sec`. Restart with the desired config to switch account storage or HTTP server lifecycle timeouts. Reserved distributed backends such as `pg+redis` fail fast until implemented.
+Startup-only keys cannot be changed through `POST /admin/api/config`: `account.storage.*`, `account.local.*`, `account.sqlite.*`, `account.postgresql.*`, `account.redis.*`, `server.*_timeout_sec`, and `server.max_header_bytes`. Restart with the desired config to switch account storage or HTTP server lifecycle/resource-boundary settings. Reserved distributed backends such as `pg+redis` fail fast until implemented.
 
 ### Token Management
 

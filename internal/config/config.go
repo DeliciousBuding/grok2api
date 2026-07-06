@@ -403,4 +403,5 @@ var startupOnlyPrefixes = []string{
 	"server.write_timeout_sec",
 	"server.idle_timeout_sec",
 	"server.shutdown_timeout_sec",
+	"server.max_header_bytes",
 }
