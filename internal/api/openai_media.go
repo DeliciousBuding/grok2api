@@ -83,6 +83,7 @@ func (s *Server) handleFileVideo(c *gin.Context) {
 const (
 	defaultImageEditMaxFileBytes = 30 << 20
 	defaultFetchImageMaxBytes    = 50 << 20
+	defaultFetchImageTimeout     = 30 * time.Second
 )
 
 func (s *Server) handleImageGenerations(c *gin.Context) {
@@ -499,7 +500,7 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	}
 	defer release()
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: fetchImageTimeout()}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -517,6 +518,14 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(body), nil
+}
+
+func fetchImageTimeout() time.Duration {
+	timeoutS := config.Global().GetInt("asset.fetch_image_timeout_sec", int(defaultFetchImageTimeout/time.Second))
+	if timeoutS <= 0 {
+		return defaultFetchImageTimeout
+	}
+	return time.Duration(timeoutS) * time.Second
 }
 
 func readFetchedImageBytes(r io.Reader) ([]byte, error) {

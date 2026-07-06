@@ -784,6 +784,26 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestFetchImageBase64UsesConfiguredTimeout(t *testing.T) {
+	loadTestConfig(t, "[asset]\nfetch_image_timeout_sec = 1\n")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	start := time.Now()
+	_, err := fetchImageBase64(context.Background(), upstream.URL+"/slow.png")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected configured image fetch timeout to fail")
+	}
+	if elapsed > 1700*time.Millisecond {
+		t.Fatalf("expected configured timeout near 1s, elapsed %s", elapsed)
+	}
+}
+
 func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_fetch_image_concurrency = 1\n")
 
