@@ -783,5 +783,5 @@ All errors follow this format:
 | `invalid_request_error` | 413 | Request body exceeds `server.max_body_bytes`; response code is `request_body_too_large` |
 | `authentication_error` | 401 | Missing or invalid API key |
 | `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |
-| `upstream_error` | 502 | Grok upstream returned an error |
+| `upstream_error` | 502 | Grok upstream returned an error, or `response_format=b64_json` image fetching failed |
 | `server_error` | 500 | Internal server error |
