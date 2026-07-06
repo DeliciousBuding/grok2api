@@ -520,6 +520,10 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		n = 10
 	}
 
+	timedReq, cancel := requestWithTimeoutClass(c.Request, "image", 300)
+	defer cancel()
+	c.Request = timedReq
+
 	aspectRatio := grok.ResolveAspectRatio(size)
 	enableNSFW := config.Global().GetBool("features.enable_nsfw", true)
 	enablePro := grok.IsProImageModel(spec.ModelName)

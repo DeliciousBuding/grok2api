@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -96,6 +97,12 @@ func timeoutClassDuration(class string, defaultSec int) time.Duration {
 		n = defaultSec
 	}
 	return time.Duration(n) * time.Second
+}
+
+func requestWithTimeoutClass(r *http.Request, class string, defaultSec int) (*http.Request, context.CancelFunc) {
+	timeout := timeoutClassDuration(class, defaultSec)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	return r.WithContext(ctx), cancel
 }
 
 // asAppError is a thin wrapper around errors.As to avoid pulling errors

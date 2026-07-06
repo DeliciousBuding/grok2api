@@ -166,6 +166,10 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 		n = maxN
 	}
 
+	timedReq, cancel := requestWithTimeoutClass(c.Request, "image", 300)
+	defer cancel()
+	c.Request = timedReq
+
 	aspectRatio := grok.ResolveAspectRatio(size)
 	enableNSFW := config.Global().GetBool("features.enable_nsfw", true)
 	enablePro := grok.IsProImageModel(spec.ModelName)

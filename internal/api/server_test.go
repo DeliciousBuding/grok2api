@@ -1128,6 +1128,23 @@ func TestBuildWSImageStreamMarkdownRejectsMissingURL(t *testing.T) {
 	}
 }
 
+func TestRequestWithTimeoutClassUsesConfiguredDeadline(t *testing.T) {
+	loadTestConfig(t, "[timeout]\nimage_sec = 7\n")
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	timedReq, cancel := requestWithTimeoutClass(req, "image", 300)
+	defer cancel()
+
+	deadline, ok := timedReq.Context().Deadline()
+	if !ok {
+		t.Fatal("expected timeout class to set a request deadline")
+	}
+	remaining := time.Until(deadline)
+	if remaining < 6*time.Second || remaining > 8*time.Second {
+		t.Fatalf("expected image timeout near 7s, got %s", remaining)
+	}
+}
+
 func TestWriteWSImageStreamFailureRecordsMetricsAndFeedback(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 	rec := httptest.NewRecorder()
