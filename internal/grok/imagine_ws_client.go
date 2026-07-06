@@ -95,7 +95,9 @@ func (s *ImagineStream) runRounds(ctx context.Context, ch chan<- ImagineEvent, p
 		if ctx.Err() != nil {
 			return false, 0
 		}
-		ch <- ImagineEvent{Type: ImagineEventError, Error: fmt.Sprintf("WS imagine connect failed: %v", err)}
+		if !emitImagineEvent(ctx, ch, ImagineEvent{Type: ImagineEventError, Error: fmt.Sprintf("WS imagine connect failed: %v", err)}) {
+			return false, 0
+		}
 		return true, 0
 	}
 	defer conn.Close()
@@ -148,12 +150,14 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 		if time.Since(roundStart) >= timeout {
 			for _, slot := range slots {
 				if !slot.done && slot.lastBlob != "" {
-					collected++
-					ch <- ImagineEvent{
+					if !emitImagineEvent(ctx, ch, ImagineEvent{
 						Type: ImagineEventImage, ImageID: slot.imageID,
 						Order: slot.order, URL: slot.lastURL, Blob: slot.lastBlob,
 						Width: slot.width, Height: slot.height, IsFinal: true,
+					}) {
+						return false, collected
 					}
+					collected++
 				}
 			}
 			return false, collected
@@ -167,12 +171,14 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 			}
 			for _, slot := range slots {
 				if !slot.done && slot.lastBlob != "" {
-					collected++
-					ch <- ImagineEvent{
+					if !emitImagineEvent(ctx, ch, ImagineEvent{
 						Type: ImagineEventImage, ImageID: slot.imageID,
 						Order: slot.order, URL: slot.lastURL, Blob: slot.lastBlob,
 						Width: slot.width, Height: slot.height, IsFinal: true,
+					}) {
+						return false, collected
 					}
+					collected++
 				}
 			}
 			return true, collected
@@ -199,9 +205,11 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 					imageID: parsed.ImageID, order: parsed.Order,
 					width: parsed.Width, height: parsed.Height, progress: 10,
 				}
-				ch <- ImagineEvent{
+				if !emitImagineEvent(ctx, ch, ImagineEvent{
 					Type: ImagineEventProgress, ImageID: parsed.ImageID,
 					Order: parsed.Order, Progress: 10,
+				}) {
+					return false, collected
 				}
 
 			case "completed":
@@ -211,17 +219,21 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 				}
 				slot.done = true
 				if parsed.Moderated {
-					ch <- ImagineEvent{
+					if !emitImagineEvent(ctx, ch, ImagineEvent{
 						Type: ImagineEventModerated, ImageID: parsed.ImageID,
 						Order: slot.order, Moderated: true,
+					}) {
+						return false, collected
 					}
 				} else {
-					collected++
-					ch <- ImagineEvent{
+					if !emitImagineEvent(ctx, ch, ImagineEvent{
 						Type: ImagineEventImage, ImageID: slot.imageID,
 						Order: slot.order, URL: slot.lastURL, Blob: slot.lastBlob,
 						Width: slot.width, Height: slot.height, IsFinal: true,
+					}) {
+						return false, collected
 					}
+					collected++
 				}
 				if collected >= needed || allSlotsDone(slots) {
 					return false, collected
@@ -252,9 +264,11 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 			}
 			if progress > slot.progress {
 				slot.progress = progress
-				ch <- ImagineEvent{
+				if !emitImagineEvent(ctx, ch, ImagineEvent{
 					Type: ImagineEventProgress, ImageID: imageID,
 					Order: slot.order, Progress: progress,
+				}) {
+					return false, collected
 				}
 			}
 
@@ -263,9 +277,23 @@ func (s *ImagineStream) runOneRound(ctx context.Context, conn *websocket.Conn, c
 			if errMsg == "" {
 				errMsg = fmt.Sprintf("upstream imagine error: %v", msg)
 			}
-			ch <- ImagineEvent{Type: ImagineEventError, Error: errMsg}
+			if !emitImagineEvent(ctx, ch, ImagineEvent{Type: ImagineEventError, Error: errMsg}) {
+				return false, collected
+			}
 			return true, collected
 		}
+	}
+}
+
+func emitImagineEvent(ctx context.Context, ch chan<- ImagineEvent, ev ImagineEvent) bool {
+	if err := ctx.Err(); err != nil {
+		return false
+	}
+	select {
+	case ch <- ev:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
