@@ -1167,6 +1167,25 @@ func TestWriteWSImageGenerationFailureRecordsMetricsAndFeedback(t *testing.T) {
 	}
 }
 
+func TestWriteWSImageGenerationEmptyOutputRecordsMetricsAndFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+
+	server.writeWSImageGenerationEmptyOutput(c, "grok-imagine-image", &account.Lease{Token: "tok-a", ModeID: 1})
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 response, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_empty_outputs_total{model="grok-imagine-image",surface="image_ws"} 1`) {
+		t.Fatalf("expected image_ws empty-output metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="server_error"} 1`) {
+		t.Fatalf("expected server_error feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

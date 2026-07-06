@@ -595,7 +595,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		}
 
 		if imageChunks == 0 {
-			err := platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+			err := platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
 			s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)
 			s.writeWSImageStreamFailure(sw, req.Model, lease, err)
 			return
@@ -672,7 +672,7 @@ func buildWSImageChatContent(imageURLs []string) (string, error) {
 		mds = append(mds, "![image]("+u+")")
 	}
 	if len(mds) == 0 {
-		return "", platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+		return "", platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
 	}
 	return strings.Join(mds, "\n\n"), nil
 }

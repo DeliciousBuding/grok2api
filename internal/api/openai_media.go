@@ -87,6 +87,7 @@ const (
 	defaultFetchImageMaxBytes            = 50 << 20
 	defaultFetchImageTimeout             = 30 * time.Second
 	defaultFetchImageMaxIdleConnsPerHost = 100
+	noGeneratedImagesMessage             = "no generated images returned"
 )
 
 func (s *Server) handleImageGenerations(c *gin.Context) {
@@ -208,12 +209,22 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	}
 	out, err := renderGeneratedImages(c.Request.Context(), responseFormat, images, s.metricsRegistry())
 	if err != nil {
+		if isNoGeneratedImagesError(err) {
+			s.writeWSImageGenerationEmptyOutput(c, spec.ModelName, lease)
+			return
+		}
 		s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
 		writeAppError(c, err)
 		return
 	}
 	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
+}
+
+func (s *Server) writeWSImageGenerationEmptyOutput(c *gin.Context, modelName string, lease *account.Lease) {
+	err := platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
+	s.metricsRegistry().IncEmptyOutput("image_ws", modelName)
+	s.writeWSImageGenerationFailure(c, modelName, lease, err)
 }
 
 func (s *Server) writeWSImageGenerationFailure(c *gin.Context, modelName string, lease *account.Lease, err error) {
@@ -319,7 +330,7 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 		reg = regs[0]
 	}
 	if len(images) == 0 {
-		return nil, platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+		return nil, platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
 	}
 	out := make([]map[string]any, 0, len(images))
 	for _, img := range images {
@@ -346,9 +357,14 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 		out = append(out, map[string]any{"url": img.url})
 	}
 	if len(out) == 0 {
-		return nil, platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+		return nil, platform.UpstreamError(noGeneratedImagesMessage, http.StatusBadGateway, "")
 	}
 	return out, nil
+}
+
+func isNoGeneratedImagesError(err error) bool {
+	var appErr *platform.AppError
+	return asAppError(err, &appErr) && appErr.Message == noGeneratedImagesMessage
 }
 
 func readImageEditFileBytes(r io.Reader) ([]byte, error) {
