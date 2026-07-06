@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -28,6 +29,44 @@ func TestRequestSizeMiddlewareRejectsOversizedBody(t *testing.T) {
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected 413, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequestSizeMiddlewareReportsChunkedOversizedJSONAs413(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n[server]\nmax_body_bytes = 8\n")
+
+	r := NewServer(&snapshotRepo{}, nil, nil, nil, nil).Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/tokens/add", io.NopCloser(strings.NewReader(`{"tokens":["tok-a"]}`)))
+	req.ContentLength = -1
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer admin")
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "request_body_too_large") {
+		t.Fatalf("expected request_body_too_large code, got %s", w.Body.String())
+	}
+}
+
+func TestAdminStorageEndpointReportsRepositoryBackend(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+
+	server := NewServer(account.NewSQLiteRepository("accounts.sqlite3"), nil, nil, nil, nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/storage", nil)
+	req.Header.Set("Authorization", "Bearer admin")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"type":"sqlite"`) {
+		t.Fatalf("expected sqlite storage type, got %s", w.Body.String())
 	}
 }
 

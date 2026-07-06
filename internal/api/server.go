@@ -157,9 +157,20 @@ func writeAppError(c *gin.Context, err error) {
 // readJSON decodes the request body into v using gin's binding.
 func readJSON(c *gin.Context, v any) error {
 	if err := c.ShouldBindJSON(v); err != nil {
+		if isRequestBodyTooLarge(err) {
+			return platform.NewAppError("Request body too large", platform.ErrValidation, "request_body_too_large", http.StatusRequestEntityTooLarge)
+		}
 		return platform.ValidationError("Invalid JSON body: "+err.Error(), "body")
 	}
 	return nil
+}
+
+func isRequestBodyTooLarge(err error) bool {
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		return true
+	}
+	return strings.Contains(err.Error(), "http: request body too large")
 }
 
 func readOptionalJSON(c *gin.Context, v any) error {

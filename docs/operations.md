@@ -113,6 +113,10 @@ stream_idle_sec = 60
 
 Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
 
+`server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
+
+`GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
+
 ## Load Smoke Test
 
 The repository includes a dependency-free load smoke command. The default target is `/health`, so it is safe to run before adding account credentials.
