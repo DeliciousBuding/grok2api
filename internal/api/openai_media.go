@@ -199,8 +199,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 			}
 			images = append(images, generatedImage{url: url, blob: ev.Blob})
 		case grok.ImagineEventError:
-			s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusBadGateway)
-			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
+			s.writeWSImageGenerationFailure(c, spec.ModelName, lease, platform.UpstreamError(ev.Error, http.StatusBadGateway, ""))
 			return
 		}
 	}
@@ -215,6 +214,19 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	}
 	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
+}
+
+func (s *Server) writeWSImageGenerationFailure(c *gin.Context, modelName string, lease *account.Lease, err error) {
+	status := http.StatusBadGateway
+	var appErr *platform.AppError
+	if asAppError(err, &appErr) && appErr.Status > 0 {
+		status = appErr.Status
+	}
+	s.metricsRegistry().IncUpstreamStatus("image_ws", modelName, status)
+	writeAppError(c, err)
+	if lease != nil {
+		s.feedbackError(lease.Token, err, lease.ModeID)
+	}
 }
 
 // handleImageEdits serves the multipart image-edit endpoint.
