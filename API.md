@@ -561,6 +561,32 @@ Batch endpoints accept a bounded `concurrency` query parameter. Invalid, zero, o
 | `POST` | `/admin/api/assets/delete-item` | Delete a specific asset |
 | `POST` | `/admin/api/assets/clear-token` | Clear all assets for a token |
 
+#### `GET /admin/api/assets`
+
+Lists upstream assets per account using bounded account pagination and bounded upstream-list concurrency.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `page` | `1` | — | Positive account page number |
+| `page_size` | `50` | `1000` | Positive account page size; larger values return `invalid_page_size` |
+| `pool` | — | — | Optional `basic`, `super`, or `heavy` account filter |
+| `status` | — | — | Optional `active`, `cooling`, `expired`, or `disabled` account filter |
+| `concurrency` | `20` | `80` | Positive upstream asset-list worker concurrency |
+
+The response includes `pagination` metadata for the account page used to select tokens.
+
+#### Asset Deletion
+
+`POST /admin/api/assets/delete-item` requires `token` and `asset_id` (or `assetId`). Missing fields return `missing_token` or `missing_asset_id`.
+
+`POST /admin/api/assets/clear-token` deletes all upstream assets for one token and therefore requires an explicit confirmation body:
+
+```json
+{"token": "<sso-token>", "confirm": true}
+```
+
+Omitting `confirm: true` returns HTTP 400 with `confirmation_required`.
+
 ### Media Cache
 
 | Method | Path | Description |

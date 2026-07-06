@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:19
+最后更新：2026-07-06 08:30
 
 # Task Breakdown
 
@@ -56,3 +56,10 @@
 - [x] Reject empty batch cache-clear token lists before service-availability checks.
 - [x] Reject invalid cache `type` / `cache_type` values across cache list and mutation endpoints.
 - [x] Add bounded cache-list pagination metadata and negative-case regression tests.
+
+## Phase 9: Admin Asset Guardrails
+
+- [x] Add bounded account pagination, filters, and metadata to `GET /admin/api/assets`.
+- [x] Add bounded upstream asset-list concurrency and invalid query tests.
+- [x] Split destructive asset delete validation into specific missing-field errors.
+- [x] Require explicit confirmation for clearing all assets for a token.

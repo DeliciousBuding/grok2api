@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:19
+最后更新：2026-07-06 08:30
 
 # Risk Assessment
 
@@ -35,10 +35,12 @@
 - Admin pool replacement rejects invalid pool names and malformed pool payloads instead of silently ignoring them.
 - Admin batch endpoints now reject invalid `concurrency` and `enabled` query values before starting work.
 - Admin cache-management endpoints now reject invalid cache types, malformed JSON, and oversized cache-list pagination.
+- Admin asset listing now has bounded account pagination, query validation, and bounded upstream-list concurrency.
+- Destructive asset operations now use specific missing-field errors, and clear-token requires `confirm: true`.
 
 ## Remaining Risks
 
 - External dashboards and alert rules are still deployment-specific.
 - Chaos/failure simulation beyond load smoke is still future work.
-- Asset-management endpoints still need deeper pagination and destructive-operation failure-mode tests.
+- Broader destructive-operation audit logging is still future work.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.

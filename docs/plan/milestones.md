@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:19
+最后更新：2026-07-06 08:30
 
 # Milestones
 
@@ -12,3 +12,4 @@
 | Runtime Resilience | Latency histograms, stream idle timeout, and load smoke tooling are verified. |
 | Admin API Validation | Token listing is paginated and invalid admin payloads fail with predictable errors. |
 | Admin Batch/Cache Guardrails | Batch and cache-management endpoints reject invalid parameters before executing work. |
+| Admin Asset Guardrails | Asset listing is bounded and destructive asset operations require precise validation. |

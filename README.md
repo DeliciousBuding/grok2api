@@ -295,6 +295,10 @@ curl "http://localhost:8000/admin/api/tokens?page=1&page_size=50" \
 curl "http://localhost:8000/admin/api/cache/list?type=image&page=1&page_size=100" \
   -H "Authorization: Bearer grok2api"
 
+# 分页查看账号资产（按账号分页，concurrency 最大 80）
+curl "http://localhost:8000/admin/api/assets?page=1&page_size=50&concurrency=20" \
+  -H "Authorization: Bearer grok2api"
+
 # 更新配置
 curl -X POST http://localhost:8000/admin/api/config \
   -H "Authorization: Bearer grok2api" \

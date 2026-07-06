@@ -118,6 +118,9 @@ const (
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000
+
+	adminDefaultAssetConcurrency = 20
+	adminMaxAssetConcurrency     = 80
 )
 
 func (s *Server) handleTokensList(c *gin.Context) {
@@ -951,9 +954,19 @@ func extractAssetRows(token string, resp map[string]any, err error) map[string]a
 // --- Assets ---
 
 func (s *Server) handleAssetsList(c *gin.Context) {
+	query, err := parseAdminListQuery(c)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
+	conc, err := parseBoundedPositiveQueryInt(c, "concurrency", adminDefaultAssetConcurrency, adminMaxAssetConcurrency)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
-	page, err := s.Repo.ListAccounts(ctx, account.ListQuery{Page: 1, PageSize: 5000, IncludeDeleted: false})
+	page, err := s.Repo.ListAccounts(ctx, query)
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -962,13 +975,20 @@ func (s *Server) handleAssetsList(c *gin.Context) {
 	totalAssets := 0
 	mu := sync.Mutex{}
 	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, 20)
+	sem := make(chan struct{}, conc)
 	for _, rec := range page.Items {
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-ctx.Done():
+				mu.Lock()
+				results = append(results, extractAssetRows(t, nil, ctx.Err()))
+				mu.Unlock()
+				return
+			}
 			resp, err := grok.ListAssets(ctx, s.Transport, t)
 			row := extractAssetRows(t, resp, err)
 			mu.Lock()
@@ -983,26 +1003,43 @@ func (s *Server) handleAssetsList(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"tokens":       results,
 		"total_assets": totalAssets,
+		"pagination": gin.H{
+			"page":        page.Page,
+			"page_size":   page.PageSize,
+			"total":       page.Total,
+			"total_pages": page.TotalPages,
+			"has_more":    page.Page < page.TotalPages,
+			"revision":    page.Revision,
+		},
 	})
 }
 
 func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 	var body struct {
-		Token   string `json:"token"`
-		AssetID string `json:"asset_id"`
+		Token        string `json:"token"`
+		AssetID      string `json:"asset_id"`
+		AssetIDCamel string `json:"assetId"`
 	}
 	if err := readJSON(c, &body); err != nil {
 		writeAppError(c, err)
 		return
 	}
 	token := platform.SanitizeToken(body.Token)
-	if token == "" || body.AssetID == "" {
-		writeAppError(c, platform.ValidationError("Missing token or asset_id", "body"))
+	if token == "" {
+		writeAppError(c, platform.ValidationErrorCode("Missing token", "token", "missing_token"))
+		return
+	}
+	assetID := strings.TrimSpace(body.AssetID)
+	if assetID == "" {
+		assetID = strings.TrimSpace(body.AssetIDCamel)
+	}
+	if assetID == "" {
+		writeAppError(c, platform.ValidationErrorCode("Missing asset_id", "asset_id", "missing_asset_id"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
-	if _, err := grok.DeleteAsset(ctx, s.Transport, token, body.AssetID); err != nil {
+	if _, err := grok.DeleteAsset(ctx, s.Transport, token, assetID); err != nil {
 		writeAppError(c, err)
 		return
 	}
@@ -1011,7 +1048,8 @@ func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 
 func (s *Server) handleAssetsClearToken(c *gin.Context) {
 	var body struct {
-		Token string `json:"token"`
+		Token   string `json:"token"`
+		Confirm bool   `json:"confirm"`
 	}
 	if err := readJSON(c, &body); err != nil {
 		writeAppError(c, err)
@@ -1019,7 +1057,11 @@ func (s *Server) handleAssetsClearToken(c *gin.Context) {
 	}
 	token := platform.SanitizeToken(body.Token)
 	if token == "" {
-		writeAppError(c, platform.ValidationError("Missing token", "token"))
+		writeAppError(c, platform.ValidationErrorCode("Missing token", "token", "missing_token"))
+		return
+	}
+	if !body.Confirm {
+		writeAppError(c, platform.ValidationErrorCode("Set confirm=true to clear all assets for a token", "confirm", "confirmation_required"))
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
