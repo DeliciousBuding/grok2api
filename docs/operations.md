@@ -1,4 +1,4 @@
-最后更新：2026-07-06 13:07
+最后更新：2026-07-06 13:34
 
 # Operations Runbook
 
@@ -118,6 +118,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
 
 Use account tags for soft workload routing. Add tags through the admin token APIs, then send `grok2api_prefer_tags` on `/v1/chat/completions` or `/v1/responses` requests. The selector prefers accounts that contain all requested tags, but falls back to the normal candidate set when none are available; use separate API keys, admission limits, or deployments when strict tenant isolation is required.
+
+Quota refresh requests deduplicate repeated tokens in one batch and coalesce concurrent refreshes for the same token inside one process. This reduces success-feedback and admin-refresh fan-out under high concurrency; it is not a distributed lock across multiple running gateway instances.
 
 Async video job status is in-memory and bounded to the most recent 1024 jobs. Poll clients should persist any returned `video_url` they need, because older job IDs are pruned once the registry reaches that limit.
 
