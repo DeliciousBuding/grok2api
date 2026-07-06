@@ -328,6 +328,9 @@ func renderGeneratedImages(ctx context.Context, responseFormat string, images []
 			out = append(out, map[string]any{"b64_json": b64})
 			continue
 		}
+		if img.url == "" {
+			continue
+		}
 		out = append(out, map[string]any{"url": img.url})
 	}
 	if len(out) == 0 {

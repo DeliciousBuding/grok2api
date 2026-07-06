@@ -1092,6 +1092,20 @@ func TestRenderGeneratedImagesRejectsEmptyOutput(t *testing.T) {
 	}
 }
 
+func TestRenderGeneratedImagesRejectsURLResponseWithoutURL(t *testing.T) {
+	_, err := renderGeneratedImages(context.Background(), "url", []generatedImage{{blob: "abc123"}})
+	if err == nil {
+		t.Fatal("expected url response without a URL to fail")
+	}
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) {
+		t.Fatalf("expected AppError, got %T %[1]v", err)
+	}
+	if appErr.Status != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", appErr.Status)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
