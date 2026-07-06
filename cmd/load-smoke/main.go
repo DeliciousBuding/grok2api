@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -30,6 +29,16 @@ type sample struct {
 	status int
 	ms     float64
 	err    error
+}
+
+type runConfig struct {
+	Method      string
+	Target      string
+	Headers     http.Header
+	Body        []byte
+	Concurrency int
+	Duration    time.Duration
+	Timeout     time.Duration
 }
 
 func main() {
@@ -63,37 +72,15 @@ func main() {
 	reqHeaders := parseHeaders(headers)
 	target := strings.TrimRight(*baseURL, "/") + "/" + strings.TrimLeft(*path, "/")
 
-	ctx, cancel := context.WithTimeout(context.Background(), *duration)
-	defer cancel()
-
-	client := &http.Client{Timeout: *timeout}
-	results := make(chan sample, *concurrency*4)
-	var sent atomic.Uint64
-	var wg sync.WaitGroup
-	for i := 0; i < *concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-				start := time.Now()
-				status, err := doRequest(context.Background(), client, *method, target, reqHeaders, body)
-				results <- sample{status: status, ms: float64(time.Since(start).Microseconds()) / 1000, err: err}
-				sent.Add(1)
-			}
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		close(results)
-	}()
-
-	summary := summarize(results)
+	summary := runSmoke(runConfig{
+		Method:      *method,
+		Target:      target,
+		Headers:     reqHeaders,
+		Body:        body,
+		Concurrency: *concurrency,
+		Duration:    *duration,
+		Timeout:     *timeout,
+	})
 	printSummary(summary, *duration)
 	if summary.total == 0 {
 		os.Exit(1)
@@ -104,7 +91,38 @@ func main() {
 	if *maxP95Ms > 0 && summary.p95 > *maxP95Ms {
 		os.Exit(1)
 	}
-	_ = sent.Load()
+}
+
+func runSmoke(cfg runConfig) summary {
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Duration)
+	defer cancel()
+
+	client := &http.Client{Timeout: cfg.Timeout}
+	results := make(chan sample, cfg.Concurrency*4)
+	var wg sync.WaitGroup
+	for i := 0; i < cfg.Concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+				start := time.Now()
+				status, err := doRequest(ctx, client, cfg.Method, cfg.Target, cfg.Headers, cfg.Body)
+				results <- sample{status: status, ms: float64(time.Since(start).Microseconds()) / 1000, err: err}
+			}
+		}()
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	return summarize(results)
 }
 
 func loadBody(path string) ([]byte, error) {

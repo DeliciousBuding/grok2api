@@ -232,7 +232,7 @@ func runSmoke(cfg runConfig) summary {
 				default:
 				}
 				start := time.Now()
-				status, err := doRequest(context.Background(), client, cfg.Method, cfg.Target, cfg.Headers, cfg.Body)
+				status, err := doRequest(ctx, client, cfg.Method, cfg.Target, cfg.Headers, cfg.Body)
 				results <- sample{status: status, ms: float64(time.Since(start).Microseconds()) / 1000, err: err}
 			}
 		}()
