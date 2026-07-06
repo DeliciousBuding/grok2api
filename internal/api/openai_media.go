@@ -511,7 +511,10 @@ func (l *dynamicConcurrencyLimiter) acquire(ctx context.Context, limit int) (fun
 		if l.inflight < limit {
 			l.inflight++
 			l.mu.Unlock()
-			return l.release, nil
+			var once sync.Once
+			return func() {
+				once.Do(l.release)
+			}, nil
 		}
 		changed := l.changed
 		l.mu.Unlock()

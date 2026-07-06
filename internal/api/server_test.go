@@ -1043,6 +1043,41 @@ func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	}
 }
 
+func TestDynamicConcurrencyLimiterReleaseIsIdempotent(t *testing.T) {
+	limiter := newDynamicConcurrencyLimiter()
+	ctx := context.Background()
+
+	releaseA, err := limiter.acquire(ctx, 2)
+	if err != nil {
+		t.Fatalf("acquire A: %v", err)
+	}
+	releaseB, err := limiter.acquire(ctx, 2)
+	if err != nil {
+		t.Fatalf("acquire B: %v", err)
+	}
+	defer releaseB()
+
+	releaseA()
+	releaseA()
+
+	releaseC, err := limiter.acquire(ctx, 2)
+	if err != nil {
+		t.Fatalf("acquire C after one real release: %v", err)
+	}
+	defer releaseC()
+
+	blockedCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	releaseD, err := limiter.acquire(blockedCtx, 2)
+	if err == nil {
+		releaseD()
+		t.Fatal("double release should not create a phantom concurrency slot")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline while waiting for real capacity, got %T %[1]v", err)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
