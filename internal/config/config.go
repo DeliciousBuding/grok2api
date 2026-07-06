@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -27,6 +28,7 @@ type Snapshot struct {
 	userPath      string
 	defaultsMtime float64
 	userMtime     float64
+	lastLoadCheck time.Time
 }
 
 var global = &Snapshot{}
@@ -42,6 +44,7 @@ func SetPaths(defaultsPath, userPath string) {
 	global.userPath = userPath
 	global.defaultsMtime = -1
 	global.userMtime = -1
+	global.lastLoadCheck = time.Time{}
 	global.data = nil
 }
 
@@ -58,11 +61,37 @@ func Load() error {
 	return global.Load()
 }
 
+// LoadIfStale checks for config changes only when minInterval has elapsed.
+func LoadIfStale(minInterval time.Duration) error {
+	return global.LoadIfStale(minInterval)
+}
+
 // Load reloads the configuration if the underlying files changed.
 func (s *Snapshot) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.lastLoadCheck = time.Now()
 
+	return s.loadLocked()
+}
+
+// LoadIfStale reloads the configuration if the throttle window has elapsed.
+func (s *Snapshot) LoadIfStale(minInterval time.Duration) error {
+	return s.loadIfStaleAt(time.Now(), minInterval)
+}
+
+func (s *Snapshot) loadIfStaleAt(now time.Time, minInterval time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if minInterval > 0 && s.data != nil && !s.lastLoadCheck.IsZero() && now.Sub(s.lastLoadCheck) < minInterval {
+		return nil
+	}
+	s.lastLoadCheck = now
+
+	return s.loadLocked()
+}
+
+func (s *Snapshot) loadLocked() error {
 	dMtime := fileMtime(s.defaultsPath)
 	uMtime := fileMtime(s.userPath)
 	if s.data != nil && dMtime == s.defaultsMtime && uMtime == s.userMtime {
