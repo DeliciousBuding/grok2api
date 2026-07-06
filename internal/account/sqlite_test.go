@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -102,5 +103,28 @@ func TestSQLiteRepositoryAdvancesRevisionOnNoopMutation(t *testing.T) {
 	}
 	if changes.Revision != revision || len(changes.Items) != 0 {
 		t.Fatalf("unexpected no-op changeset: %#v", changes)
+	}
+}
+
+func TestSQLiteAccountDSNEscapesURIPathCharacters(t *testing.T) {
+	dsn := sqliteAccountDSN(filepath.Join("data", "accounts?blue#1.db"))
+
+	if strings.Contains(dsn, "accounts?blue") || strings.Contains(dsn, "#1.db") {
+		t.Fatalf("sqlite DSN should escape URI path metacharacters, got %q", dsn)
+	}
+	if !strings.Contains(dsn, "accounts%3Fblue%231.db") {
+		t.Fatalf("sqlite DSN should preserve the literal filename through escaping, got %q", dsn)
+	}
+	if !strings.Contains(dsn, "?_pragma=journal_mode(WAL)") {
+		t.Fatalf("sqlite DSN should keep pragmas in the query string, got %q", dsn)
+	}
+}
+
+func TestSQLiteAccountDSNPreservesWindowsDriveLetter(t *testing.T) {
+	path := "D:" + "\\" + "data" + "\\" + "accounts.db"
+	dsn := sqliteAccountDSN(path)
+
+	if !strings.HasPrefix(dsn, "file:D:/data/accounts.db?") {
+		t.Fatalf("sqlite DSN should preserve Windows drive-letter paths, got %q", dsn)
 	}
 }
