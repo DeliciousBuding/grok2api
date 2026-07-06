@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"math"
 	"path/filepath"
 	"testing"
 )
@@ -76,6 +77,47 @@ func TestRandomSelectionPrefersMatchingTags(t *testing.T) {
 	}
 	if got.Token != tagged.Token {
 		t.Fatalf("expected preferred tagged account %q, got %q", tagged.Token, got.Token)
+	}
+}
+
+func TestRandomSelectionDeduplicatesAccountsAcrossModeBuckets(t *testing.T) {
+	dir := NewDirectory(nil)
+	reset := int64(9999999999999)
+	multiMode := directoryTestSlot("tok-multi-mode", PoolBasic, 1, 30, reset, nil)
+	multiMode.Quota.Set(5, QuotaWindow{
+		Total:         20,
+		Remaining:     20,
+		WindowSeconds: 3600,
+		ResetAt:       &reset,
+	})
+	singleMode := directoryTestSlot("tok-single-mode", PoolBasic, 1, 30, reset, nil)
+	dir.slots = map[string]*Slot{
+		multiMode.Token:  multiMode,
+		singleMode.Token: singleMode,
+	}
+	dir.byMode = map[modeKey]map[string]struct{}{
+		{pool: PoolBasic, modeID: 1}: {
+			multiMode.Token:  struct{}{},
+			singleMode.Token: struct{}{},
+		},
+		{pool: PoolBasic, modeID: 5}: {
+			multiMode.Token: struct{}{},
+		},
+	}
+
+	counts := map[string]int{}
+	const trials = 12000
+	for range trials {
+		got := dir.randomSelectLocked(int(PoolBasic), 1, nil, nil, 0)
+		if got == nil {
+			t.Fatal("randomSelectLocked returned nil")
+		}
+		counts[got.Token]++
+	}
+
+	diff := math.Abs(float64(counts[multiMode.Token] - counts[singleMode.Token]))
+	if diff > trials*0.10 {
+		t.Fatalf("expected roughly even deduplicated random selection, counts=%v diff=%.0f", counts, diff)
 	}
 }
 

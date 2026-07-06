@@ -315,9 +315,13 @@ func (d *Directory) randomSelectLocked(poolID int, modeID int, exclude map[strin
 	// Union of all mode buckets for the pool (random strategy ignores specific mode).
 	candidates := []*Slot{}
 	preferred := []*Slot{}
+	seen := map[string]struct{}{}
 	for _, m := range SupportedModeIDs(PoolID(poolID).Name()) {
 		for tok := range d.byMode[modeKey{PoolID(poolID), m}] {
 			if _, skip := exclude[tok]; skip {
+				continue
+			}
+			if _, duplicate := seen[tok]; duplicate {
 				continue
 			}
 			s := d.slots[tok]
@@ -333,6 +337,7 @@ func (d *Directory) randomSelectLocked(poolID int, modeID int, exclude map[strin
 			if s.FailCount >= randomMaxFails {
 				continue
 			}
+			seen[tok] = struct{}{}
 			candidates = append(candidates, s)
 			if prefer.matches(s) {
 				preferred = append(preferred, s)
