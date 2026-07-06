@@ -293,6 +293,9 @@ func readUpstreamResponseBody(resp *http.Response) ([]byte, error) {
 
 // do builds standard *http.Request with headers, then sends via tlsclient.
 func (t *Transport) do(ctx context.Context, method, urlStr, token string, body io.Reader, o reqOpts) (*http.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	profile := resolveProxyProfile()
 	var headers http.Header
 	if o.consoleMode {
