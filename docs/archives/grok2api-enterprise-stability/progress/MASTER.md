@@ -1,4 +1,4 @@
-最后更新：2026-07-06 09:33
+最后更新：2026-07-06 09:36
 
 # Progress Master
 
@@ -116,7 +116,8 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - PR #1 merged cleanly into `main` at `d2e4d7e`; Issues #2 through #12 were closed by the merge.
 - Main-branch CI run `28762036537` completed successfully.
 - Main-branch Docker publishing run `28762036545` completed successfully.
-- GHCR tags `latest`, `main`, `sha-d2e4d7e`, `1.0.1`, and `v1.0.1` resolve to OCI index digest `sha256:eb239353ce23f60a83dbdcc7c5b321dd27379662c1a875a81a4782da404b4018` with `linux/amd64`, `linux/arm64`, and `linux/arm/v7` manifests.
+- Post-merge GHCR inspection confirmed the published OCI index included `linux/amd64`, `linux/arm64`, and `linux/arm/v7` manifests. Mutable tags are not recorded as durable state because later mainline publishes can move them.
+- The Docker workflow now has a push path filter so documentation-only mainline pushes do not republish mutable image tags.
 
 ## Governance
 
