@@ -563,6 +563,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		progressMap := map[string]int{}
 		completedIDs := map[string]bool{}
 		lastProgress := -1
+		imageChunks := 0
 
 		for ev := range events {
 			switch ev.Type {
@@ -578,13 +579,13 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 					sw.writeJSONData(chunk)
 				}
 			case grok.ImagineEventImage:
+				md, ok := buildWSImageStreamMarkdown(ev.URL)
+				if !ok {
+					continue
+				}
+				imageChunks++
 				completedIDs[ev.ImageID] = true
 				progressMap[ev.ImageID] = 100
-				url := ev.URL
-				if url != "" {
-					url = grok.ImageBaseURL + strings.TrimPrefix(url, "/")
-				}
-				md := "![image](" + url + ")"
 				chunk := makeStreamChunk(completionID, created, modelName, md, "", false)
 				sw.writeJSONData(chunk)
 			case grok.ImagineEventError:
@@ -592,6 +593,15 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 				sw.writeOpenAIError(ev.Error, "upstream_error", "", "")
 				return
 			}
+		}
+
+		if imageChunks == 0 {
+			err := platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
+			s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)
+			s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
+			sw.writeOpenAIAppError(err)
+			s.feedbackError(lease.Token, err, lease.ModeID)
+			return
 		}
 
 		finalChunk := makeStreamChunk(completionID, created, modelName, "", "", true)
@@ -668,6 +678,14 @@ func buildWSImageChatContent(imageURLs []string) (string, error) {
 		return "", platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
 	}
 	return strings.Join(mds, "\n\n"), nil
+}
+
+func buildWSImageStreamMarkdown(url string) (string, bool) {
+	if url == "" {
+		return "", false
+	}
+	url = grok.ImageBaseURL + strings.TrimPrefix(url, "/")
+	return "![image](" + url + ")", true
 }
 
 // extractImagePrompt extracts the text prompt from chat messages.

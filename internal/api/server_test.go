@@ -1120,6 +1120,12 @@ func TestBuildWSImageChatContentRejectsEmptyOutput(t *testing.T) {
 	}
 }
 
+func TestBuildWSImageStreamMarkdownRejectsMissingURL(t *testing.T) {
+	if md, ok := buildWSImageStreamMarkdown(""); ok || md != "" {
+		t.Fatalf("expected missing stream image URL to be rejected, got ok=%v md=%q", ok, md)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
