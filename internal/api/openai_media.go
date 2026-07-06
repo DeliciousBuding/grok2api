@@ -186,7 +186,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 
 	stream := grok.NewImagineStream(lease.Token)
 	s.metricsRegistry().IncAttempt("image_ws", spec.ModelName)
-	events := stream.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
+	events := stream.StreamImages(c.Request.Context(), prompt, aspectRatio, n, enableNSFW, enablePro)
 
 	type collectedImage struct {
 		url  string

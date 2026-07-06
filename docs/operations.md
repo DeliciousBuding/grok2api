@@ -131,6 +131,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 Chat-routed lite image generation also checks the client request context before starting fan-out workers, so already-canceled requests do not reserve accounts or start upstream image attempts.
 
+WebSocket image generation inherits the client request context as well. Client cancellation stops pending websocket dials and closes active imagine streams instead of waiting for the upstream read deadline.
+
 `upstream.max_response_bytes` caps non-streaming JSON and gRPC-web response bodies read into memory. SSE streaming responses are governed by request timeouts and stream idle timeouts instead.
 
 Non-2xx upstream responses use a small bounded body sample for diagnostics rather than the full success-response cap. This keeps error handling predictable when an upstream service returns a large HTML or JSON error body.

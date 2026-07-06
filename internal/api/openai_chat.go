@@ -542,7 +542,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 
 	streamGen := grok.NewImagineStream(lease.Token)
 	s.metricsRegistry().IncAttempt("image_ws", req.Model)
-	events := streamGen.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
+	events := streamGen.StreamImages(c.Request.Context(), prompt, aspectRatio, n, enableNSFW, enablePro)
 
 	if stream {
 		sw := newSSEWriter(c.Writer)
