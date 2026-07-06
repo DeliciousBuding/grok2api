@@ -1,4 +1,4 @@
-最后更新：2026-07-06 14:01
+最后更新：2026-07-06 14:44
 
 # Operations Runbook
 
@@ -114,6 +114,8 @@ stream_idle_sec = 60
 Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
 
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
+
+Request-path config reload checks are throttled to avoid filesystem stat and TOML parsing amplification under load. `POST /admin/api/config` still persists changes and forces an immediate reload; if an externally edited config file is temporarily invalid, the previous in-memory snapshot remains in use until a valid reload succeeds.
 
 `GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
 

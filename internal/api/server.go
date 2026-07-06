@@ -133,10 +133,12 @@ func (s *Server) Router() *gin.Engine {
 // configReloadMiddleware re-checks the config files on every request.
 func configReloadMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		_ = config.Load()
+		_ = config.LoadIfStale(requestConfigReloadMinInterval)
 		c.Next()
 	}
 }
+
+const requestConfigReloadMinInterval = 500 * time.Millisecond
 
 // --- shared helpers ---
 
