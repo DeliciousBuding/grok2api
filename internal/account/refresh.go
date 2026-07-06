@@ -47,6 +47,15 @@ type RefreshService struct {
 	onDemandMu       sync.Mutex
 	lastOnDemand     time.Time
 	minOnDemandDelta time.Duration
+
+	refreshMu sync.Mutex
+	inFlight  map[string]*refreshCall
+}
+
+type refreshCall struct {
+	done      chan struct{}
+	refreshed bool
+	err       error
 }
 
 // NewRefreshService creates a refresh service bound to the repository.
@@ -65,20 +74,61 @@ func (s *RefreshService) RefreshTokens(ctx context.Context, tokens []string) (in
 	}
 	refreshed := 0
 	failed := 0
-	for _, tok := range tokens {
-		recs, err := s.repo.GetAccounts(ctx, []string{tok})
-		if err != nil || len(recs) == 0 {
+	seen := map[string]struct{}{}
+	for _, raw := range tokens {
+		tok := platform.SanitizeToken(raw)
+		if tok == "" {
 			failed++
 			continue
 		}
-		rec := recs[0]
-		if _, err := s.refreshOne(ctx, rec, true); err != nil {
+		if _, ok := seen[tok]; ok {
+			continue
+		}
+		seen[tok] = struct{}{}
+		ok, err := s.refreshToken(ctx, tok)
+		if err != nil || !ok {
 			failed++
 			continue
 		}
 		refreshed++
 	}
 	return refreshed, failed, nil
+}
+
+func (s *RefreshService) refreshToken(ctx context.Context, tok string) (bool, error) {
+	s.refreshMu.Lock()
+	if s.inFlight == nil {
+		s.inFlight = map[string]*refreshCall{}
+	}
+	if call := s.inFlight[tok]; call != nil {
+		s.refreshMu.Unlock()
+		select {
+		case <-call.done:
+			return call.refreshed, call.err
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
+	call := &refreshCall{done: make(chan struct{})}
+	s.inFlight[tok] = call
+	s.refreshMu.Unlock()
+
+	call.refreshed, call.err = s.refreshTokenOnce(ctx, tok)
+	close(call.done)
+
+	s.refreshMu.Lock()
+	delete(s.inFlight, tok)
+	s.refreshMu.Unlock()
+
+	return call.refreshed, call.err
+}
+
+func (s *RefreshService) refreshTokenOnce(ctx context.Context, tok string) (bool, error) {
+	recs, err := s.repo.GetAccounts(ctx, []string{tok})
+	if err != nil || len(recs) == 0 {
+		return false, err
+	}
+	return s.refreshOne(ctx, recs[0], true)
 }
 
 // RefreshScheduled refreshes all manageable accounts in a pool (or all pools).
