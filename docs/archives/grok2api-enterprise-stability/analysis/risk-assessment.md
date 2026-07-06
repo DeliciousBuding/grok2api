@@ -1,4 +1,4 @@
-最后更新：2026-07-06 09:11
+最后更新：2026-07-06 09:43
 
 # Risk Assessment
 
@@ -27,6 +27,7 @@
 - Retry budget decisions are test-covered through a shared helper used by streaming and non-streaming paths.
 - Docker image build now includes the default config file, runs as a non-root user, and exposes image-level healthcheck metadata.
 - Release workflow publishes GHCR images with `GITHUB_TOKEN`, metadata tags, Buildx cache, provenance, and SBOM enabled.
+- Mainline GHCR publication has been verified after merge with multi-arch `linux/amd64`, `linux/arm64`, and `linux/arm/v7` manifests.
 - Public CI now uses least-privilege permissions and gates module verification, `go vet`, full tests, binary build, resilience smoke, actionlint, and govulncheck.
 - Public Compose and operations runbook cover health checks, resource limits, update, backup, and rollback procedures.
 - Request-duration histograms expose route-pattern latency without token or path-parameter leakage.
@@ -46,4 +47,3 @@
 - External dashboards and alert rules are still deployment-specific.
 - Network-level chaos against real upstream dependencies is still environment-specific and should stay outside this public repo.
 - Audit log forwarding, retention, and tamper-evidence controls are still deployment-specific.
-- Multi-arch GHCR publication still needs a live GitHub Actions run after merge.
