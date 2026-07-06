@@ -1,4 +1,4 @@
-最后更新：2026-07-06 09:11
+最后更新：2026-07-06 09:22
 
 # Progress Master
 
@@ -108,6 +108,8 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - `docker build -t grok2api:codex-phase12 .` passed during Phase 12 public CI quality gate.
 - `docker compose -f deploy/compose.example.yml config` passed during Phase 12 public CI quality gate.
 - Public-safety and relative-time greps had no matches during Phase 12; `git diff --check` reported a CRLF normalization warning only.
+- Phase 12 CI follow-up re-ran `go mod verify`, `go vet ./...`, `go test -count=1 ./...`, `go build -trimpath -ldflags "-s -w" -o <temp binary> .`, `go run ./cmd/resilience-smoke -scenario mixed -duration 1s -concurrency 2 -timeout 500ms -max-error-rate 0.25 -max-p95-ms 1000`, `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/ci.yml .github/workflows/build.yml .github/workflows/build_docker.yml`, `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`, `docker build -t grok2api:codex-phase12-ci-fix .`, and `docker compose -f deploy/compose.example.yml config`; all passed or reported no vulnerabilities.
+- Public-safety and relative-time greps had no matches during the Phase 12 CI follow-up.
 
 ## Governance
 
@@ -130,3 +132,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 10 actual effort: medium. S.U.P.E.R score improved to high for auditability and secret-safe admin mutation boundaries. Unplanned dependency count: 1 (audit forwarding and tamper-evidence remain deployment-specific).
 - Phase 11 actual effort: medium. S.U.P.E.R score improved to high for local resilience validation and failure-scenario operability. Unplanned dependency count: 1 (network-level chaos against real upstream dependencies stays environment-specific).
 - Phase 12 actual effort: small-medium. S.U.P.E.R score improved to high for release-quality feedback loops and replaceable CI gates. Unplanned dependency count: 1 (actionlint directory path was not portable on Windows; CI uses explicit workflow globs).
+- Phase 12 CI follow-up actual effort: small. S.U.P.E.R score remains high for release feedback loops. Unplanned dependency count: 1 (remote workflow lint surfaced an existing Docker workflow output-write pattern once all workflows were linted together).
