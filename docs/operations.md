@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:49
+最后更新：2026-07-06 08:59
 
 # Operations Runbook
 
@@ -101,6 +101,43 @@ go run ./cmd/load-smoke \
 ```
 
 Do not store real API keys, SSO tokens, or cookie values in this repository.
+
+## Resilience Smoke Test
+
+`cmd/resilience-smoke` provides a local, dependency-free failure simulation gate. With no `-base-url`, it starts an embedded synthetic target and injects deterministic latency, 5xx responses, or timeouts. This keeps blast radius local while still verifying the smoke tooling, thresholds, and alert-worthy output shape.
+
+```bash
+go run ./cmd/resilience-smoke \
+  -scenario mixed \
+  -duration 10s \
+  -concurrency 8 \
+  -timeout 2s \
+  -max-error-rate 0.20 \
+  -max-p95-ms 2000
+```
+
+Supported scenarios:
+
+| Scenario | Purpose |
+|---|---|
+| `steady` | Baseline with no injected faults. |
+| `latency` | Adds deterministic latency to part of the request stream. |
+| `errors` | Returns deterministic 503 responses. |
+| `timeouts` | Exceeds the client timeout on deterministic requests. |
+| `mixed` | Combines deterministic latency and 503 responses. |
+
+To run a passive gate against a local or staging gateway, provide `-base-url` and the target path:
+
+```bash
+go run ./cmd/resilience-smoke \
+  -base-url http://127.0.0.1:8000 \
+  -path /ready \
+  -scenario steady \
+  -duration 10s \
+  -max-error-rate 0.05
+```
+
+The command prints request counts, error rate, RPS, p50/p95/p99, status-code distribution, and `verdict=PASS` or `verdict=FAIL`. Do not use production credentials in command-line headers or body files.
 
 ## Updates
 

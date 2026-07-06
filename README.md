@@ -18,6 +18,7 @@
 - **热重载配置** — 修改配置文件即时生效，无需重启
 - **资源边界与可观测性** — 请求体限制、全局/单模型 admission、`/metrics`、`/ready`
 - **安全审计事件** — 管理端变更会记录脱敏 `admin_audit` 事件，Token 仅以短哈希出现
+- **韧性烟测工具** — `cmd/load-smoke` 和 `cmd/resilience-smoke` 覆盖负载、延迟、5xx 和 timeout 场景
 - **多实例部署** — 基于文件锁的 Leader 选举，支持多进程运行
 - **多架构 Docker 镜像** — GHCR 自动构建 amd64 / arm64 / armv7
 
@@ -347,6 +348,21 @@ docker compose up -d
 ```
 
 公开运维流程见 [docs/operations.md](docs/operations.md)，包括健康检查、容量控制、`cmd/load-smoke` 负载冒烟、升级、备份和回滚。
+
+#### 本地韧性烟测
+
+`cmd/resilience-smoke` 默认启动本地合成目标，不需要账号或外部服务，可在 CI 或上线前验证错误率和延迟阈值：
+
+```bash
+go run ./cmd/resilience-smoke \
+  -scenario mixed \
+  -duration 10s \
+  -concurrency 8 \
+  -max-error-rate 0.20 \
+  -max-p95-ms 2000
+```
+
+支持 `steady`、`latency`、`errors`、`timeouts`、`mixed` 场景；也可用 `-base-url http://127.0.0.1:8000` 指向本地或 staging 网关做被动烟测。
 
 #### 本地自行构建
 

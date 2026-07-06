@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:49
+最后更新：2026-07-06 08:59
 
 # Progress Master
 
@@ -22,6 +22,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - [x] Phase 8: Admin Batch/Cache Guardrails (4/4 tasks) — #8
 - [x] Phase 9: Admin Asset Guardrails (4/4 tasks) — #9
 - [x] Phase 10: Admin Audit Events (4/4 tasks) — #10
+- [x] Phase 11: Local Resilience Smoke (4/4 tasks) — #11
 
 ## GitHub Tracking
 
@@ -35,6 +36,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 8 issue: https://github.com/DeliciousBuding/grok2api/issues/8
 - Phase 9 issue: https://github.com/DeliciousBuding/grok2api/issues/9
 - Phase 10 issue: https://github.com/DeliciousBuding/grok2api/issues/10
+- Phase 11 issue: https://github.com/DeliciousBuding/grok2api/issues/11
 
 ## Verification
 
@@ -86,6 +88,14 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - `docker compose -f deploy/compose.example.yml config` passed during Phase 10 admin audit events.
 - `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 10 admin audit events.
 - Public-safety and relative-time greps had no matches during Phase 10; `git diff --check` reported CRLF normalization warnings only.
+- `go test -count=1 ./cmd/resilience-smoke` passed during Phase 11 local resilience smoke after the required RED build failure.
+- `go run ./cmd/resilience-smoke -scenario mixed -duration 1s -concurrency 2 -timeout 500ms -max-error-rate 0.25 -max-p95-ms 1000` passed during Phase 11 local resilience smoke.
+- `go test -count=1 ./...` passed during Phase 11 local resilience smoke.
+- `go build -trimpath -ldflags "-s -w" -o <temp binary> .` passed during Phase 11 local resilience smoke.
+- `docker build -t grok2api:codex-phase11 .` passed during Phase 11 local resilience smoke.
+- `docker compose -f deploy/compose.example.yml config` passed during Phase 11 local resilience smoke.
+- `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 11 local resilience smoke.
+- Public-safety and relative-time greps had no matches during Phase 11; `git diff --check` reported CRLF normalization warnings only.
 
 ## Governance
 
@@ -106,3 +116,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 8 actual effort: medium. S.U.P.E.R score improved to high for admin batch/cache resource-control boundaries. Unplanned dependency count: 1 (asset-management endpoints remain a separate hardening lane).
 - Phase 9 actual effort: medium. S.U.P.E.R score improved to high for destructive admin asset boundaries. Unplanned dependency count: 1 (audit logging remains a separate hardening lane).
 - Phase 10 actual effort: medium. S.U.P.E.R score improved to high for auditability and secret-safe admin mutation boundaries. Unplanned dependency count: 1 (audit forwarding and tamper-evidence remain deployment-specific).
+- Phase 11 actual effort: medium. S.U.P.E.R score improved to high for local resilience validation and failure-scenario operability. Unplanned dependency count: 1 (network-level chaos against real upstream dependencies stays environment-specific).

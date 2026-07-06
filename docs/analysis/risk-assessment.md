@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:49
+最后更新：2026-07-06 08:59
 
 # Risk Assessment
 
@@ -31,6 +31,7 @@
 - Request-duration histograms expose route-pattern latency without token or path-parameter leakage.
 - Streaming chat and console paths enforce a configurable upstream idle timeout.
 - `cmd/load-smoke` provides a dependency-free load gate with error-rate and p95 thresholds.
+- `cmd/resilience-smoke` provides local synthetic failure scenarios for latency, 5xx, timeout, and mixed fault smoke gates without production blast radius.
 - Admin token listing now has bounded pagination, query validation, and pagination metadata.
 - Admin pool replacement rejects invalid pool names and malformed pool payloads instead of silently ignoring them.
 - Admin batch endpoints now reject invalid `concurrency` and `enabled` query values before starting work.
@@ -42,6 +43,6 @@
 ## Remaining Risks
 
 - External dashboards and alert rules are still deployment-specific.
-- Chaos/failure simulation beyond load smoke is still future work.
+- Network-level chaos against real upstream dependencies is still environment-specific and should stay outside this public repo.
 - Audit log forwarding, retention, and tamper-evidence controls are still deployment-specific.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.

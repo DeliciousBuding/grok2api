@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:49
+最后更新：2026-07-06 08:59
 
 # Task Breakdown
 
@@ -70,3 +70,10 @@
 - [x] Emit operation, outcome, method/path/status, counts, and safe resource metadata without raw secrets.
 - [x] Use non-reversible token identifiers instead of raw SSO tokens or reversible masks.
 - [x] Add regression tests proving destructive admin audit events do not leak raw token payloads.
+
+## Phase 11: Local Resilience Smoke
+
+- [x] Add a dependency-free `cmd/resilience-smoke` command with embedded synthetic target mode.
+- [x] Support steady, latency, 5xx error, timeout, and mixed failure scenarios.
+- [x] Emit automated PASS/FAIL verdicts from request counts, error rate, p95 latency, and status distribution.
+- [x] Add focused tests for scenario validation, deterministic fault injection, and verdict thresholds.
