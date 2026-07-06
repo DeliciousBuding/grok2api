@@ -609,6 +609,62 @@ func TestAdminBatchRejectsInvalidQueryValues(t *testing.T) {
 	}
 }
 
+func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
+	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
+	started := make(chan struct{}, len(tokens))
+	release := make(chan struct{})
+	done := make(chan struct{})
+	mu := sync.Mutex{}
+	active := 0
+	maxActive := 0
+	processed := 0
+
+	go func() {
+		runAdminTokenWorkers(context.Background(), tokens, 2, func(ctx context.Context, token string) {
+			mu.Lock()
+			active++
+			if active > maxActive {
+				maxActive = active
+			}
+			mu.Unlock()
+			started <- struct{}{}
+			<-release
+			mu.Lock()
+			active--
+			processed++
+			mu.Unlock()
+		})
+		close(done)
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("workers did not start")
+		}
+	}
+	select {
+	case <-started:
+		t.Fatal("started more work than configured concurrency before release")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("workers did not finish")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if processed != len(tokens) {
+		t.Fatalf("expected all tokens processed, got %d", processed)
+	}
+	if maxActive > 2 {
+		t.Fatalf("expected max active work <= 2, got %d", maxActive)
+	}
+}
+
 func TestAdminBatchCacheClearRejectsEmptyTokensBeforeRefreshCheck(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
