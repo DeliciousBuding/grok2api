@@ -14,7 +14,9 @@ services:
       LOG_DIR: "/app/logs"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       LOG_FILE_ENABLED: "${LOG_FILE_ENABLED:-true}"
+      ACCOUNT_STORAGE_BACKEND: "${ACCOUNT_STORAGE_BACKEND:-text}"
       ACCOUNT_LOCAL_PATH: "/app/data/accounts.jsonl"
+      ACCOUNT_SQLITE_PATH: "/app/data/accounts.sqlite3"
       ACCOUNT_SYNC_INTERVAL: "${ACCOUNT_SYNC_INTERVAL:-30}"
       PROXY_HTTP: "${PROXY_HTTP:-}"
     volumes:

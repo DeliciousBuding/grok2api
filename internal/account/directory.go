@@ -120,6 +120,11 @@ func (d *Directory) SyncIfChanged(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if len(cs.Items) == 0 {
+		if cs.Revision > since {
+			d.mu.Lock()
+			d.revision = cs.Revision
+			d.mu.Unlock()
+		}
 		return false, nil
 	}
 	d.mu.Lock()

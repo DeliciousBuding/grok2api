@@ -14,6 +14,7 @@
 - **代理支持** — 直连 / 单代理，兼容 HTTP/HTTPS/SOCKS4/5
 - **Cloudflare 绕过** — 手动 Cookie 注入，`cf_clearance` 自动提取
 - **本地媒体缓存** — 图片和视频本地缓存，LRU 淘汰
+- **可选账号存储** — 默认 JSONL，单机部署可切换 SQLite；分布式 PG+Redis 后端保留为 fail-fast 配置
 - **管理后台** — 完整的 Token CRUD、配置热更新、批量操作
 - **热重载配置** — 修改配置文件即时生效，无需重启
 - **资源边界与可观测性** — 请求体限制、全局/单模型 admission、`/metrics`、`/ready`
@@ -223,6 +224,21 @@ heavy_interval_sec = 7200       # heavy 池刷新间隔（秒）
 [account.selection]
 max_inflight = 8                # 单号并发上限，quota/random 选号策略均生效
 
+[account.storage]
+backend = "text"                # text/jsonl/local 或 sqlite；pg+redis 当前会 fail-fast
+
+[account.local]
+path = ""                       # text/jsonl/local 路径，留空使用 data/accounts.jsonl
+
+[account.sqlite]
+path = ""                       # sqlite 路径，留空使用 data/accounts.sqlite3
+
+[account.postgresql]
+dsn = ""                        # 预留：未来 pg+redis 后端
+
+[account.redis]
+addr = ""                       # 预留：未来 pg+redis 后端
+
 [timeout]
 chat_sec = 300                  # 聊天上游超时（秒）
 console_sec = 300               # Console 上游超时（秒）
@@ -251,11 +267,30 @@ timeout = 60                    # NSFW 设置超时（秒）
 | `LOG_LEVEL` | 日志级别 | `INFO` |
 | `LOG_FILE_ENABLED` | 启用文件日志 | `true` |
 | `DATA_DIR` | 数据目录 | `./data` |
-| `ACCOUNT_LOCAL_PATH` | 账号存储路径 | `./data/accounts.jsonl` |
+| `ACCOUNT_STORAGE_BACKEND` | 账号存储后端：`text` 或 `sqlite` | `text` |
+| `ACCOUNT_LOCAL_PATH` | JSONL 账号存储路径 | `./data/accounts.jsonl` |
+| `ACCOUNT_SQLITE_PATH` | SQLite 账号数据库路径 | `./data/accounts.sqlite3` |
 | `PROXY_HTTP` | 代理地址（覆盖配置文件） | _(空)_ |
 | `GROK_SECTION_KEY` | 配置覆盖（映射到 `section.key`） | _(空)_ |
 
 > `GROK_*` 环境变量可用于覆盖任意配置项。例如 `GROK_FEATURES_STREAM=false` 等同于 `features.stream = false`。
+> `account.storage.*`、`account.local.*`、`account.sqlite.*`、`account.postgresql.*`、`account.redis.*` 属于启动期配置，不能通过管理 API 热更新；修改后需要重启进程或容器。
+
+### 账号存储后端
+
+默认后端是 `text`，使用 `data/accounts.jsonl`，兼容早期部署和人工备份流程。
+
+单机部署可切换到 SQLite，减少 JSONL 全量重写带来的落盘放大，并使用 WAL / busy timeout 提升本地并发写入的稳定性。SQLite 面向单个活跃进程，不要让多实例同时共享同一个账号数据库文件：
+
+```toml
+[account.storage]
+backend = "sqlite"
+
+[account.sqlite]
+path = "/app/data/accounts.sqlite3"
+```
+
+`pg+redis` / `postgres+redis` / `postgresql+redis` 是预留的分布式账号后端名称，用于未来多实例共享账号池。当前版本会在启动时 fail-fast，不会静默回退到 JSONL 或 SQLite。
 
 ## 账号池与模型
 

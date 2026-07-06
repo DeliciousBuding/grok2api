@@ -365,6 +365,7 @@ func IsStartupOnlyConfigKey(dotted string) bool {
 var startupOnlyPrefixes = []string{
 	"account.storage",
 	"account.local",
+	"account.sqlite",
 	"account.redis",
 	"account.mysql",
 	"account.postgresql",

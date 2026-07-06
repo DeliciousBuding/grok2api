@@ -3,7 +3,7 @@
 // Lifecycle mirrors the upstream Python project:
 //  1. Early logging setup (env-driven, before config).
 //  2. Load TOML configuration (defaults + user + env overrides).
-//  3. Open the SQLite account repository and bootstrap the in-memory directory.
+//  3. Open the configured account repository and bootstrap the in-memory directory.
 //  4. Build the TLS-fingerprinted transport and quota fetcher.
 //  5. Reconcile the runtime selection strategy (quota vs random).
 //  6. Acquire the scheduler-leader file lock — only the leader runs the
@@ -70,14 +70,13 @@ func main() {
 		cfg.GetInt("logging.max_files", 7),
 	)
 
-	// 3. Open the account repository (JSONL text file).
-	dbPath := resolveAccountPath(cfg)
-	logger.Infof("account storage configured: backend=text target=%s", dbPath)
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		logger.Errorf("account storage dir create failed: error=%v", err)
+	// 3. Open the account repository.
+	repo, repoInfo, err := account.NewRepositoryFromConfig(cfg)
+	if err != nil {
+		logger.Errorf("account repository configure failed: error=%v", err)
 		os.Exit(1)
 	}
-	repo := account.NewTxtRepository(dbPath)
+	logger.Infof("account storage configured: backend=%s target=%s", repoInfo.Backend, repoInfo.Target)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -325,16 +324,6 @@ func userConfigPath() string {
 		return p
 	}
 	return platform.DataPath("config.toml")
-}
-
-func resolveAccountPath(cfg *config.Snapshot) string {
-	if p := strings.TrimSpace(os.Getenv("ACCOUNT_LOCAL_PATH")); p != "" {
-		return p
-	}
-	if p := cfg.GetStr("account.local.path", ""); p != "" {
-		return p
-	}
-	return platform.DataPath("accounts.jsonl")
 }
 
 func defaultRefreshInterval(pool string) int {

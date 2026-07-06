@@ -78,6 +78,26 @@ heavy_interval_sec = 7200
 # 单号并发上限
 max_inflight = 8
 
+[account.storage]
+# 账号存储后端：text/jsonl/local 或 sqlite。pg+redis 会 fail-fast，保留给分布式后端实现。
+backend = "text"
+
+[account.local]
+# text/jsonl/local 后端的账号文件路径。留空时使用 DATA_DIR/accounts.jsonl。
+path = ""
+
+[account.sqlite]
+# sqlite 后端的数据库路径。留空时使用 DATA_DIR/accounts.sqlite3。
+path = ""
+
+[account.postgresql]
+# 预留：未来 pg+redis 后端的 PostgreSQL DSN。
+dsn = ""
+
+[account.redis]
+# 预留：未来 pg+redis 后端的 Redis 地址。
+addr = ""
+
 # ==================== 上游/管理超时配置 ====================
 [timeout]
 # 聊天上游超时（秒）

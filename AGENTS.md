@@ -11,6 +11,7 @@ This repository is a public, production-hardened fork of `grok2api`.
 - Do not commit real SSO tokens, API keys, cookies, hostnames, account dumps, or deployment paths.
 - Keep examples generic and safe for public GitHub.
 - Prefer test-first changes for request routing, account selection, retry behavior, config loading, and persistence.
+- Storage backend changes must preserve the `account.Repository` contract and cover startup-only config behavior.
 - Run `go test ./...` before claiming a code change is complete.
 - Treat `config.defaults.toml`, `README.md`, and `API.md` as public documentation surfaces.
 
