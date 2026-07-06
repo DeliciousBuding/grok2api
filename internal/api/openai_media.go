@@ -911,6 +911,7 @@ func (s *Server) failVideoJobWithAccountFeedback(job *videoJob, modelName string
 	if err == nil {
 		err = platform.UpstreamError("video generation failed", http.StatusBadGateway, "")
 	}
+	err = videoJobRequestContextError(err)
 	if shouldRecordUpstreamStatus(err) {
 		s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
 	}
@@ -918,6 +919,13 @@ func (s *Server) failVideoJobWithAccountFeedback(job *videoJob, modelName string
 	if lease != nil {
 		s.feedbackError(lease.Token, err, lease.ModeID)
 	}
+}
+
+func videoJobRequestContextError(err error) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return platform.NewAppError("video generation timeout", platform.ErrUpstream, "video_generation_timeout", http.StatusGatewayTimeout)
+	}
+	return err
 }
 
 func (j *videoJob) markInProgress() {

@@ -487,6 +487,35 @@ func TestFailVideoJobWithAccountFeedbackRecordsMetricsAndFeedback(t *testing.T) 
 	}
 }
 
+func TestFailVideoJobWithAccountFeedbackClassifiesDeadline(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	job := &videoJob{
+		ID:        "video_test",
+		Object:    "video",
+		CreatedAt: 1,
+		Status:    "in_progress",
+		Model:     "grok-imagine-video",
+		Prompt:    "a city",
+		Seconds:   6,
+		Size:      "720x1280",
+		Quality:   "standard",
+	}
+
+	server.failVideoJobWithAccountFeedback(job, "grok-imagine-video", &account.Lease{Token: "tok-a", ModeID: 1}, context.DeadlineExceeded)
+
+	snapshot := job.toDict()
+	if snapshot["status"] != "failed" {
+		t.Fatalf("expected failed video job, got %#v", snapshot)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-video",status="504",surface="video"} 1`) {
+		t.Fatalf("expected video 504 timeout metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="server_error"} 1`) {
+		t.Fatalf("expected timeout to feed account health as server_error, got:\n%s", rendered)
+	}
+}
+
 func TestAdminTokensListUsesBoundedPagination(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	repo := &snapshotRepo{listPage: &account.Page{
