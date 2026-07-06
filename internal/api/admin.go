@@ -89,6 +89,10 @@ func (s *Server) handleConfigUpdate(c *gin.Context) {
 	if s.Directory != nil {
 		s.Directory.SetStrategy(account.Strategy(strategy))
 	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation: "config.update",
+		Count:     len(patch),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":             "success",
 		"message":            "配置已更新",
@@ -277,6 +281,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 		return
 	}
 	total := 0
+	allTokens := []string{}
 	for poolName, items := range body {
 		if poolName == "" {
 			writeAppError(c, platform.ValidationErrorCode("Pool name is required", "pool", "invalid_pool"))
@@ -316,6 +321,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 				continue
 			}
 			upserts = append(upserts, account.Upsert{Token: token, Pool: poolName, Tags: account.SortTags(tags)})
+			allTokens = append(allTokens, token)
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 		_, err := s.Repo.ReplacePool(ctx, poolName, upserts)
@@ -326,6 +332,14 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 		}
 		total += len(upserts)
 	}
+	tokenIDs := adminAuditTokenIDs(allTokens)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.replace",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Count:      total,
+		Upserted:   total,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "success", "count": total})
 }
 
@@ -430,6 +444,20 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		}
 	}
 
+	tokenIDs := adminAuditTokenIDs(newTokens)
+	state := ""
+	if autoDetect {
+		state = "auto_detect"
+	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.add",
+		Pool:       pool,
+		State:      state,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Count:      len(upserts),
+		Upserted:   len(upserts),
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"count":   len(upserts),
@@ -464,6 +492,13 @@ func (s *Server) handleTokensDelete(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	tokenIDs := adminAuditTokenIDs(clean)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.delete",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Deleted:    result.Deleted,
+	})
 	c.JSON(http.StatusOK, gin.H{"deleted": result.Deleted})
 }
 
@@ -483,6 +518,10 @@ func (s *Server) handleTokensDeleteInvalid(c *gin.Context) {
 		tokens = append(tokens, rec.Token)
 	}
 	if len(tokens) == 0 {
+		setAdminAudit(c, AdminAuditEvent{
+			Operation: "tokens.delete_invalid",
+			Deleted:   0,
+		})
 		c.JSON(http.StatusOK, gin.H{"deleted": 0})
 		return
 	}
@@ -491,6 +530,13 @@ func (s *Server) handleTokensDeleteInvalid(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	tokenIDs := adminAuditTokenIDs(tokens)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.delete_invalid",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Deleted:    result.Deleted,
+	})
 	c.JSON(http.StatusOK, gin.H{"deleted": result.Deleted})
 }
 
@@ -550,6 +596,19 @@ func (s *Server) handleTokensEdit(c *gin.Context) {
 			return
 		}
 	}
+	deleted := 0
+	if old != newTok {
+		deleted = 1
+	}
+	tokenIDs := adminAuditTokenIDs([]string{old, newTok})
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.edit",
+		Pool:       pool,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Upserted:   1,
+		Deleted:    deleted,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "success", "token": newTok, "pool": pool})
 }
 
@@ -579,6 +638,18 @@ func (s *Server) handleTokensToggleDisabled(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	state := "active"
+	if body.Disabled {
+		state = "disabled"
+	}
+	tokenIDs := adminAuditTokenIDs([]string{token})
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.disabled",
+		State:      state,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Patched:    1,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "success", "token": token, "disabled": body.Disabled})
 }
 
@@ -617,6 +688,23 @@ func (s *Server) handleTokensToggleDisabledBatch(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	patchedTokens := make([]string, 0, len(patches))
+	for _, patch := range patches {
+		patchedTokens = append(patchedTokens, patch.Token)
+	}
+	state := "active"
+	if body.Disabled {
+		state = "disabled"
+	}
+	tokenIDs := adminAuditTokenIDs(patchedTokens)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "tokens.disabled_batch",
+		State:      state,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Patched:    result.Patched,
+		Failed:     len(patches) - result.Patched,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":   "success",
 		"disabled": body.Disabled,
@@ -677,10 +765,24 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
-	if _, err := s.Repo.ReplacePool(ctx, pool, upserts); err != nil {
+	result, err := s.Repo.ReplacePool(ctx, pool, upserts)
+	if err != nil {
 		writeAppError(c, err)
 		return
 	}
+	tokenIDs := adminAuditTokenIDs(body.Tokens)
+	upserted := len(upserts)
+	if result != nil && result.Upserted > 0 {
+		upserted = result.Upserted
+	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "pool.replace",
+		Pool:       pool,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Count:      len(upserts),
+		Upserted:   upserted,
+	})
 	c.JSON(http.StatusOK, gin.H{"pool": pool, "count": len(upserts)})
 }
 
@@ -715,6 +817,8 @@ func (s *Server) handleBatchNSFW(c *gin.Context) {
 	mu := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	sem := make(chan struct{}, conc)
+	successCount := 0
+	failedCount := 0
 	for _, tok := range tokens {
 		wg.Add(1)
 		go func(t string) {
@@ -726,12 +830,27 @@ func (s *Server) handleBatchNSFW(c *gin.Context) {
 			defer mu.Unlock()
 			if err != nil {
 				results[maskToken(t)] = gin.H{"error": err.Error()}
+				failedCount++
 			} else {
 				results[maskToken(t)] = gin.H{"success": true}
+				successCount++
 			}
 		}(tok)
 	}
 	wg.Wait()
+	tokenIDs := adminAuditTokenIDs(tokens)
+	state := "enabled"
+	if !enabled {
+		state = "disabled"
+	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "batch.nsfw",
+		State:      state,
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Count:      successCount,
+		Failed:     failedCount,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"results": results,
@@ -774,6 +893,8 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 	mu := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	sem := make(chan struct{}, conc)
+	refreshedCount := 0
+	failedCount := 0
 	for _, tok := range tokens {
 		wg.Add(1)
 		go func(t string) {
@@ -785,12 +906,24 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 			defer mu.Unlock()
 			if err != nil {
 				results[maskToken(t)] = gin.H{"error": err.Error()}
+				failedCount++
 			} else {
 				results[maskToken(t)] = gin.H{"refreshed": refreshed > 0}
+				if refreshed > 0 {
+					refreshedCount++
+				}
 			}
 		}(tok)
 	}
 	wg.Wait()
+	tokenIDs := adminAuditTokenIDs(tokens)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "batch.refresh",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Count:      refreshedCount,
+		Failed:     failedCount,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"results": results,
@@ -825,6 +958,8 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 	mu := sync.Mutex{}
 	wg := sync.WaitGroup{}
 	sem := make(chan struct{}, conc)
+	deletedTotal := 0
+	failedCount := 0
 	for _, tok := range tokens {
 		wg.Add(1)
 		go func(t string) {
@@ -836,12 +971,22 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 			defer mu.Unlock()
 			if err != nil {
 				results[maskToken(t)] = gin.H{"error": err.Error()}
+				failedCount++
 			} else {
 				results[maskToken(t)] = gin.H{"deleted": deleted}
+				deletedTotal += deleted
 			}
 		}(tok)
 	}
 	wg.Wait()
+	tokenIDs := adminAuditTokenIDs(tokens)
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "batch.cache_clear",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Deleted:    deletedTotal,
+		Failed:     failedCount,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"results": results,
@@ -1043,6 +1188,14 @@ func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	tokenIDs := adminAuditTokenIDs([]string{token})
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:   "assets.delete_item",
+		TokenCount:  len(tokenIDs),
+		TokenIDs:    tokenIDs,
+		AssetIDHash: adminAuditHash(assetID),
+		Deleted:     1,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
@@ -1071,6 +1224,13 @@ func (s *Server) handleAssetsClearToken(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	tokenIDs := adminAuditTokenIDs([]string{token})
+	setAdminAudit(c, AdminAuditEvent{
+		Operation:  "assets.clear_token",
+		TokenCount: len(tokenIDs),
+		TokenIDs:   tokenIDs,
+		Deleted:    deleted,
+	})
 	c.JSON(http.StatusOK, gin.H{"status": "success", "deleted": deleted})
 }
 
@@ -1264,6 +1424,11 @@ func (s *Server) handleCacheClear(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation: "cache.clear",
+		MediaType: string(mediaType),
+		Deleted:   removed,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"result": gin.H{"removed": removed},
@@ -1297,6 +1462,11 @@ func (s *Server) handleCacheItemDelete(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("File not found", "name", "file_not_found"))
 		return
 	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation: "cache.item_delete",
+		MediaType: string(mediaType),
+		Deleted:   1,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"result": gin.H{"deleted": body.Name},
@@ -1338,6 +1508,13 @@ func (s *Server) handleCacheItemsDelete(c *gin.Context) {
 		}
 		deleted++
 	}
+	setAdminAudit(c, AdminAuditEvent{
+		Operation: "cache.items_delete",
+		MediaType: string(mediaType),
+		Count:     len(clean),
+		Deleted:   deleted,
+		Missing:   missing,
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"result": gin.H{"deleted": deleted, "missing": missing},

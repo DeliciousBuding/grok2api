@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:30
+最后更新：2026-07-06 08:49
 
 # Task Breakdown
 
@@ -63,3 +63,10 @@
 - [x] Add bounded upstream asset-list concurrency and invalid query tests.
 - [x] Split destructive asset delete validation into specific missing-field errors.
 - [x] Require explicit confirmation for clearing all assets for a token.
+
+## Phase 10: Admin Audit Events
+
+- [x] Add a sanitized admin audit event port for mutating admin endpoints.
+- [x] Emit operation, outcome, method/path/status, counts, and safe resource metadata without raw secrets.
+- [x] Use non-reversible token identifiers instead of raw SSO tokens or reversible masks.
+- [x] Add regression tests proving destructive admin audit events do not leak raw token payloads.

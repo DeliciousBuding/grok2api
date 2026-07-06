@@ -1,4 +1,4 @@
-最后更新：2026-07-06 03:10
+最后更新：2026-07-06 08:49
 
 # Operations Runbook
 
@@ -40,6 +40,14 @@ Expected behavior:
 - `/health` returns HTTP 200 when the process is serving.
 - `/ready` reports account-pool readiness and observed upstream degradation.
 - `/metrics` exposes aggregate counters, gauges, and request-duration histograms without token values.
+
+## Audit Events
+
+Mutating admin requests write one `admin_audit` log event with operation, outcome, method/path/status, counts, pool or media type where relevant, and short non-reversible token identifiers. Audit events are intended for incident review and change tracing; they intentionally omit raw SSO tokens, cookies, Authorization headers, request bodies, local paths, cache file names, tags, and raw asset IDs.
+
+```bash
+docker compose logs grok2api | grep admin_audit
+```
 
 ## Capacity Controls
 

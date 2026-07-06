@@ -21,13 +21,14 @@ import (
 
 // Server bundles the dependencies every handler needs.
 type Server struct {
-	Repo      account.Repository
-	Directory *account.Directory
-	Refresh   *account.RefreshService
-	Transport *grok.Transport
-	Media     *storage.LocalMediaCacheStore
-	Admission *admission.Controller
-	Metrics   *metrics.Registry
+	Repo       account.Repository
+	Directory  *account.Directory
+	Refresh    *account.RefreshService
+	Transport  *grok.Transport
+	Media      *storage.LocalMediaCacheStore
+	Admission  *admission.Controller
+	Metrics    *metrics.Registry
+	AdminAudit AdminAuditSink
 }
 
 // NewServer constructs a Server bound to the given dependencies.
@@ -94,6 +95,7 @@ func (s *Server) Router() *gin.Engine {
 	// Admin endpoints.
 	admin := engine.Group("/admin/api")
 	admin.Use(verifyAdminKey())
+	admin.Use(s.adminAuditMiddleware())
 	{
 		admin.GET("/verify", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"status": "success"})

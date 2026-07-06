@@ -726,6 +726,90 @@ func TestAdminAssetsClearTokenRejectsMissingTokenAndRequiresConfirmation(t *test
 	}
 }
 
+func TestAdminAuditTokensDeleteUsesHashedTokenIdentifiers(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	rawToken := "sso-super-secret-token-12345678901234567890"
+	repo := &snapshotRepo{}
+	server := NewServer(repo, nil, nil, nil, nil)
+	events := []AdminAuditEvent{}
+	server.AdminAudit = AdminAuditFunc(func(event AdminAuditEvent) {
+		events = append(events, event)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodDelete, "/admin/api/tokens", strings.NewReader(`["`+rawToken+`"]`))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one audit event, got %#v", events)
+	}
+	event := events[0]
+	if event.Operation != "tokens.delete" || event.Outcome != "success" || event.Method != http.MethodDelete || event.Path != "/admin/api/tokens" {
+		t.Fatalf("unexpected audit event identity: %#v", event)
+	}
+	if event.TokenCount != 1 || len(event.TokenIDs) != 1 || event.TokenIDs[0] == "" {
+		t.Fatalf("expected one hashed token identifier, got %#v", event)
+	}
+	if event.Deleted != 1 {
+		t.Fatalf("expected deleted count in audit event, got %#v", event)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), rawToken) || strings.Contains(string(encoded), "super-secret") || strings.Contains(string(encoded), "sso-") {
+		t.Fatalf("audit event leaked raw token data: %s", encoded)
+	}
+	if event.TokenIDs[0] == rawToken || strings.Contains(event.TokenIDs[0], "...") {
+		t.Fatalf("token identifier should be a non-reversible hash, got %q", event.TokenIDs[0])
+	}
+}
+
+func TestAdminAuditPoolReplaceOmitsRawTokenPayload(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	rawA := "sso-pool-secret-token-a-12345678901234567890"
+	rawB := "sso-pool-secret-token-b-12345678901234567890"
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	events := []AdminAuditEvent{}
+	server.AdminAudit = AdminAuditFunc(func(event AdminAuditEvent) {
+		events = append(events, event)
+	})
+
+	body := `{"pool":"heavy","tokens":["` + rawA + `","` + rawB + `"],"tags":["private-tag"]}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/admin/api/pool", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one audit event, got %#v", events)
+	}
+	event := events[0]
+	if event.Operation != "pool.replace" || event.Pool != "heavy" || event.TokenCount != 2 || event.Upserted != 2 {
+		t.Fatalf("unexpected pool replace audit event: %#v", event)
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{rawA, rawB, "pool-secret", "sso-", "private-tag"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("audit event leaked forbidden payload %q: %s", forbidden, encoded)
+		}
+	}
+}
+
 func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
 	t.Helper()
 	body := &bytes.Buffer{}
@@ -764,7 +848,7 @@ func (r *snapshotRepo) PatchAccounts(ctx context.Context, patches []account.Patc
 	return &account.MutationResult{}, nil
 }
 func (r *snapshotRepo) DeleteAccounts(ctx context.Context, tokens []string) (*account.MutationResult, error) {
-	return &account.MutationResult{}, nil
+	return &account.MutationResult{Deleted: len(tokens)}, nil
 }
 func (r *snapshotRepo) GetAccounts(ctx context.Context, tokens []string) ([]*account.Record, error) {
 	return nil, nil
@@ -777,7 +861,7 @@ func (r *snapshotRepo) ListAccounts(ctx context.Context, query account.ListQuery
 	return &account.Page{}, nil
 }
 func (r *snapshotRepo) ReplacePool(ctx context.Context, pool string, upserts []account.Upsert) (*account.MutationResult, error) {
-	return &account.MutationResult{}, nil
+	return &account.MutationResult{Upserted: len(upserts)}, nil
 }
 func (r *snapshotRepo) ResetExpiredConsoleWindows(ctx context.Context) (int, error) {
 	return 0, nil

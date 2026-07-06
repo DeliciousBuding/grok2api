@@ -17,6 +17,7 @@
 - **管理后台** — 完整的 Token CRUD、配置热更新、批量操作
 - **热重载配置** — 修改配置文件即时生效，无需重启
 - **资源边界与可观测性** — 请求体限制、全局/单模型 admission、`/metrics`、`/ready`
+- **安全审计事件** — 管理端变更会记录脱敏 `admin_audit` 事件，Token 仅以短哈希出现
 - **多实例部署** — 基于文件锁的 Leader 选举，支持多进程运行
 - **多架构 Docker 镜像** — GHCR 自动构建 amd64 / arm64 / armv7
 
@@ -277,6 +278,8 @@ timeout = 60                    # NSFW 设置超时（秒）
 ## 管理 API
 
 管理端点使用 `app.app_key` 认证，支持 `Authorization: Bearer` 或 `?app_key=` 参数。
+
+所有管理端写操作会输出 `admin_audit` 日志事件。事件包含操作名、成功/失败、HTTP method/path/status、数量和安全资源标识；不会记录原始 SSO Token、Cookie、Authorization 头、请求体、缓存文件名或本地路径。
 
 ```bash
 # 查看系统状态

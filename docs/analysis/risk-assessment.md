@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:30
+最后更新：2026-07-06 08:49
 
 # Risk Assessment
 
@@ -37,10 +37,11 @@
 - Admin cache-management endpoints now reject invalid cache types, malformed JSON, and oversized cache-list pagination.
 - Admin asset listing now has bounded account pagination, query validation, and bounded upstream-list concurrency.
 - Destructive asset operations now use specific missing-field errors, and clear-token requires `confirm: true`.
+- Mutating admin endpoints now emit sanitized `admin_audit` events with operation, outcome, counts, safe resource metadata, and non-reversible token identifiers.
 
 ## Remaining Risks
 
 - External dashboards and alert rules are still deployment-specific.
 - Chaos/failure simulation beyond load smoke is still future work.
-- Broader destructive-operation audit logging is still future work.
+- Audit log forwarding, retention, and tamper-evidence controls are still deployment-specific.
 - Multi-arch GHCR publication still needs a live GitHub Actions run after merge.
