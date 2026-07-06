@@ -205,6 +205,7 @@ func (d *Directory) Reserve(poolCandidates []int, modeID int, excludeTokens []st
 	defer d.mu.Unlock()
 	nowMs := platform.NowMs()
 	nowSec := nowMs / 1000
+	prefer := newTagPreference(preferTags)
 	exclude := map[string]struct{}{}
 	for _, t := range excludeTokens {
 		exclude[t] = struct{}{}
@@ -212,9 +213,9 @@ func (d *Directory) Reserve(poolCandidates []int, modeID int, excludeTokens []st
 	for _, poolID := range poolCandidates {
 		var chosen *Slot
 		if d.strategy == StrategyQuota {
-			chosen = d.quotaSelectLocked(poolID, modeID, exclude, nowMs)
+			chosen = d.quotaSelectLocked(poolID, modeID, exclude, prefer, nowMs)
 		} else {
-			chosen = d.randomSelectLocked(poolID, modeID, exclude, nowSec)
+			chosen = d.randomSelectLocked(poolID, modeID, exclude, prefer, nowSec)
 		}
 		if chosen != nil {
 			chosen.Inflight++
@@ -242,16 +243,19 @@ func (d *Directory) Reserve(poolCandidates []int, modeID int, excludeTokens []st
 	return nil, modeID
 }
 
-func (d *Directory) quotaSelectLocked(poolID int, modeID int, exclude map[string]struct{}, nowMs int64) *Slot {
+func (d *Directory) quotaSelectLocked(poolID int, modeID int, exclude map[string]struct{}, prefer tagPreference, nowMs int64) *Slot {
 	key := modeKey{PoolID(poolID), modeID}
 	bucket := d.byMode[key]
 	if len(bucket) == 0 {
 		return nil
 	}
 	nowSec := nowMs / 1000
-	var best *Slot
-	bestScore := 0.0
-	hasBest := false
+	var bestAny *Slot
+	bestAnyScore := 0.0
+	hasBestAny := false
+	var bestPreferred *Slot
+	bestPreferredScore := 0.0
+	hasBestPreferred := false
 	for tok := range bucket {
 		if _, skip := exclude[tok]; skip {
 			continue
@@ -274,13 +278,21 @@ func (d *Directory) quotaSelectLocked(poolID int, modeID int, exclude map[string
 			continue
 		}
 		score := quotaScore(s, w.Remaining, nowSec)
-		if !hasBest || score > bestScore {
-			best = s
-			bestScore = score
-			hasBest = true
+		if !hasBestAny || score > bestAnyScore {
+			bestAny = s
+			bestAnyScore = score
+			hasBestAny = true
+		}
+		if prefer.matches(s) && (!hasBestPreferred || score > bestPreferredScore) {
+			bestPreferred = s
+			bestPreferredScore = score
+			hasBestPreferred = true
 		}
 	}
-	return best
+	if hasBestPreferred {
+		return bestPreferred
+	}
+	return bestAny
 }
 
 func quotaScore(s *Slot, remaining int, nowSec int64) float64 {
@@ -299,9 +311,10 @@ func quotaScore(s *Slot, remaining int, nowSec int64) float64 {
 	return score
 }
 
-func (d *Directory) randomSelectLocked(poolID int, modeID int, exclude map[string]struct{}, nowSec int64) *Slot {
+func (d *Directory) randomSelectLocked(poolID int, modeID int, exclude map[string]struct{}, prefer tagPreference, nowSec int64) *Slot {
 	// Union of all mode buckets for the pool (random strategy ignores specific mode).
 	candidates := []*Slot{}
+	preferred := []*Slot{}
 	for _, m := range SupportedModeIDs(PoolID(poolID).Name()) {
 		for tok := range d.byMode[modeKey{PoolID(poolID), m}] {
 			if _, skip := exclude[tok]; skip {
@@ -321,7 +334,13 @@ func (d *Directory) randomSelectLocked(poolID int, modeID int, exclude map[strin
 				continue
 			}
 			candidates = append(candidates, s)
+			if prefer.matches(s) {
+				preferred = append(preferred, s)
+			}
 		}
+	}
+	if len(preferred) > 0 {
+		return preferred[rand.Intn(len(preferred))]
 	}
 	if len(candidates) == 0 {
 		return nil
@@ -515,4 +534,42 @@ func maxF(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+type tagPreference map[string]struct{}
+
+func newTagPreference(tags []string) tagPreference {
+	if len(tags) == 0 {
+		return nil
+	}
+	prefer := tagPreference{}
+	for _, tag := range tags {
+		if tag == "" {
+			continue
+		}
+		prefer[tag] = struct{}{}
+	}
+	if len(prefer) == 0 {
+		return nil
+	}
+	return prefer
+}
+
+func (p tagPreference) matches(s *Slot) bool {
+	if len(p) == 0 || s == nil {
+		return false
+	}
+	for tag := range p {
+		found := false
+		for _, have := range s.Tags {
+			if have == tag {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

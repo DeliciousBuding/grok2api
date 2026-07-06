@@ -8,6 +8,7 @@
 - **Anthropic 兼容** — `/v1/messages`，支持流式和非流式
 - **多账号池管理** — 支持 basic / super / heavy 三级账号池，自动配额跟踪
 - **智能选号** — 配额感知策略（按剩余配额评分）和随机策略，自动故障转移
+- **账号标签偏好** — 请求级 `grok2api_prefer_tags` 可优先路由到指定标签账号，匹配不到自动回退
 - **浏览器指纹伪装** — TLS 指纹、HTTP/2 头序、Chrome 客户端提示，规避上游检测
 - **WebSocket 图像生成** — 通过 `wss://grok.com/ws/imagine/listen` 实时流式生成图像，支持进度回调
 - **纯 Go 生成反 bot 头** — `x-statsig-id` 等头由内置算法实时生成，无需浏览器或 JS 运行时

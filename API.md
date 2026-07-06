@@ -33,7 +33,8 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
   "stream": true,
   "temperature": 0.8,
   "top_p": 0.95,
-  "reasoning_effort": "medium"
+  "reasoning_effort": "medium",
+  "grok2api_prefer_tags": ["tenant-a"]
 }
 ```
 
@@ -50,6 +51,13 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
 | `tool_choice` | any | — | Tool selection strategy |
 | `image_config` | object | — | Image generation options (`n`, `size`, `response_format`) when using an image model |
 | `video_config` | object | — | Video generation options (`seconds`, `size`) when using a video model |
+| `grok2api_prefer_tags` | string array | — | grok2api extension: prefer accounts that contain all listed tags; if no available account matches, selection falls back to the normal strategy |
+
+#### Account Tag Preference
+
+`grok2api_prefer_tags` is a soft routing hint for `/v1/chat/completions`, including console chat and chat-routed image/video models. It lets operators tag accounts for tenants, workloads, or egress groups, then prefer those accounts per request without creating separate deployments.
+
+The selector requires an account to contain all requested tags. Matching accounts are preferred inside the requested pool and mode; within that preferred set, the configured selection strategy still applies. If no eligible account has all tags, the request falls back to the normal untagged candidate set instead of failing.
 
 #### Messages with Images
 
@@ -143,7 +151,8 @@ OpenAI Responses API format. Console models route to console.x.ai; others go thr
   "input": "Explain quantum computing",
   "instructions": "You are a physics teacher.",
   "stream": false,
-  "reasoning": {"effort": "high"}
+  "reasoning": {"effort": "high"},
+  "grok2api_prefer_tags": ["tenant-a"]
 }
 ```
 
@@ -158,6 +167,7 @@ OpenAI Responses API format. Console models route to console.x.ai; others go thr
 | `top_p` | float | Nucleus sampling |
 | `tools` | array | Tool definitions |
 | `tool_choice` | any | Tool selection |
+| `grok2api_prefer_tags` | string array | grok2api extension: soft account tag preference, same semantics as `/v1/chat/completions` |
 
 ---
 
