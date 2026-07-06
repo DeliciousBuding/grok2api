@@ -15,6 +15,8 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
+const defaultAssetMaxDownloadBytes = 30 << 20
+
 // AssetUploadResult is the response from POST /rest/app-chat/upload-file.
 type AssetUploadResult struct {
 	FileID  string `json:"fileMetadataId"`
@@ -162,9 +164,9 @@ func UploadFromInput(ctx context.Context, t *Transport, token, fileInput string)
 			return AssetUploadResult{}, err
 		}
 		defer reader.Close()
-		raw, err := io.ReadAll(reader)
+		raw, err := readAssetUploadBytes(reader)
 		if err != nil {
-			return AssetUploadResult{}, platform.UpstreamError("asset fetch read failed: "+err.Error(), 502, "")
+			return AssetUploadResult{}, err
 		}
 		mime := InferContentType(fileInput)
 		if mime == "" {
@@ -182,6 +184,25 @@ func UploadFromInput(ctx context.Context, t *Transport, token, fileInput string)
 		return AssetUploadResult{}, err
 	}
 	return UploadFile(ctx, t, token, filename, mime, b64)
+}
+
+func readAssetUploadBytes(reader io.Reader) ([]byte, error) {
+	limit := config.Global().GetInt("asset.max_download_bytes", defaultAssetMaxDownloadBytes)
+	if limit <= 0 {
+		limit = defaultAssetMaxDownloadBytes
+	}
+	raw, err := io.ReadAll(io.LimitReader(reader, int64(limit)+1))
+	if err != nil {
+		return nil, platform.UpstreamError("asset fetch read failed: "+err.Error(), 502, "")
+	}
+	if len(raw) > limit {
+		return nil, platform.ValidationErrorCode(
+			fmt.Sprintf("asset download exceeds %d bytes", limit),
+			"asset",
+			"asset_download_too_large",
+		)
+	}
+	return raw, nil
 }
 
 // ListAssets returns the asset list for *token*.

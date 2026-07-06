@@ -252,6 +252,7 @@ admin_sec = 60                  # 管理操作超时（秒）
 upload_timeout = 60             # 资源上传超时（秒）
 list_timeout = 60               # 资源列表超时（秒）
 delete_timeout = 60             # 资源删除超时（秒）
+max_download_bytes = 31457280   # 远程资源下载上限（字节，<=0 使用安全默认值）
 
 [nsfw]
 timeout = 60                    # NSFW 设置超时（秒）
