@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:59
+最后更新：2026-07-06 09:11
 
 # Progress Master
 
@@ -23,6 +23,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - [x] Phase 9: Admin Asset Guardrails (4/4 tasks) — #9
 - [x] Phase 10: Admin Audit Events (4/4 tasks) — #10
 - [x] Phase 11: Local Resilience Smoke (4/4 tasks) — #11
+- [x] Phase 12: Public CI Quality Gate (4/4 tasks) — #12
 
 ## GitHub Tracking
 
@@ -37,6 +38,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 9 issue: https://github.com/DeliciousBuding/grok2api/issues/9
 - Phase 10 issue: https://github.com/DeliciousBuding/grok2api/issues/10
 - Phase 11 issue: https://github.com/DeliciousBuding/grok2api/issues/11
+- Phase 12 issue: https://github.com/DeliciousBuding/grok2api/issues/12
 
 ## Verification
 
@@ -96,6 +98,16 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - `docker compose -f deploy/compose.example.yml config` passed during Phase 11 local resilience smoke.
 - `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/build_docker.yml` passed during Phase 11 local resilience smoke.
 - Public-safety and relative-time greps had no matches during Phase 11; `git diff --check` reported CRLF normalization warnings only.
+- `go mod verify` passed during Phase 12 public CI quality gate.
+- `go vet ./...` passed during Phase 12 public CI quality gate.
+- `go test -count=1 ./...` passed during Phase 12 public CI quality gate.
+- `go build -trimpath -ldflags "-s -w" -o <temp binary> .` passed during Phase 12 public CI quality gate.
+- `go run ./cmd/resilience-smoke -scenario mixed -duration 1s -concurrency 2 -timeout 500ms -max-error-rate 0.25 -max-p95-ms 1000` passed during Phase 12 public CI quality gate.
+- `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/ci.yml .github/workflows/build.yml .github/workflows/build_docker.yml` passed during Phase 12 public CI quality gate.
+- `go run golang.org/x/vuln/cmd/govulncheck@latest ./...` reported no vulnerabilities during Phase 12 public CI quality gate.
+- `docker build -t grok2api:codex-phase12 .` passed during Phase 12 public CI quality gate.
+- `docker compose -f deploy/compose.example.yml config` passed during Phase 12 public CI quality gate.
+- Public-safety and relative-time greps had no matches during Phase 12; `git diff --check` reported a CRLF normalization warning only.
 
 ## Governance
 
@@ -117,3 +129,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 9 actual effort: medium. S.U.P.E.R score improved to high for destructive admin asset boundaries. Unplanned dependency count: 1 (audit logging remains a separate hardening lane).
 - Phase 10 actual effort: medium. S.U.P.E.R score improved to high for auditability and secret-safe admin mutation boundaries. Unplanned dependency count: 1 (audit forwarding and tamper-evidence remain deployment-specific).
 - Phase 11 actual effort: medium. S.U.P.E.R score improved to high for local resilience validation and failure-scenario operability. Unplanned dependency count: 1 (network-level chaos against real upstream dependencies stays environment-specific).
+- Phase 12 actual effort: small-medium. S.U.P.E.R score improved to high for release-quality feedback loops and replaceable CI gates. Unplanned dependency count: 1 (actionlint directory path was not portable on Windows; CI uses explicit workflow globs).

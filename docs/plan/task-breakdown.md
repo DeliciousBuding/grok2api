@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:59
+最后更新：2026-07-06 09:11
 
 # Task Breakdown
 
@@ -77,3 +77,10 @@
 - [x] Support steady, latency, 5xx error, timeout, and mixed failure scenarios.
 - [x] Emit automated PASS/FAIL verdicts from request counts, error rate, p95 latency, and status distribution.
 - [x] Add focused tests for scenario validation, deterministic fault injection, and verdict thresholds.
+
+## Phase 12: Public CI Quality Gate
+
+- [x] Add a least-privilege CI workflow for pull requests and relevant pushes.
+- [x] Gate module verification, `go vet`, full tests, binary build, and local resilience smoke.
+- [x] Gate workflow syntax with actionlint and dependency/code vulnerability exposure with govulncheck.
+- [x] Keep release artifact publishing separate from PR quality validation.

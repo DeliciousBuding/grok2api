@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.yml"
+      - "Dockerfile"
+      - "deploy/**"
+      - "cmd/**"
+      - "internal/**"
+      - "*.go"
+      - "go.mod"
+      - "go.sum"
+      - "config.defaults.toml"
+      - "VERSION"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/*.yml"
+      - "Dockerfile"
+      - "deploy/**"
+      - "cmd/**"
+      - "internal/**"
+      - "*.go"
+      - "go.mod"
+      - "go.sum"
+      - "config.defaults.toml"
+      - "VERSION"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify module downloads
+        run: go mod verify
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -count=1 ./...
+
+      - name: Build binary
+        run: go build -trimpath -ldflags="-s -w" -o /tmp/grok2api .
+
+      - name: Local resilience smoke
+        run: |
+          go run ./cmd/resilience-smoke \
+            -scenario mixed \
+            -duration 1s \
+            -concurrency 2 \
+            -timeout 500ms \
+            -max-error-rate 0.25 \
+            -max-p95-ms 1000
+
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Lint GitHub Actions workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/*.yml
+
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

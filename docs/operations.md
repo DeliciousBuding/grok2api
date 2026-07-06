@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:59
+最后更新：2026-07-06 09:11
 
 # Operations Runbook
 
@@ -12,6 +12,24 @@ The Docker workflow publishes `ghcr.io/deliciousbuding/grok2api` from the public
 - Pushes to `main` and `v*` tags publish multi-arch images for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 - Authentication uses the repository `GITHUB_TOKEN` with `contents: read` and `packages: write`; no custom package PAT is required.
 - Published tags include `latest` for the default branch, the Git ref, the short commit SHA, and the version read from `VERSION`.
+
+## CI Quality Gate
+
+The public CI workflow uses least-privilege `contents: read` permissions and does not require secrets. It runs on pull requests, relevant pushes to `main`, and manual dispatch.
+
+Gate coverage:
+
+```bash
+go mod verify
+go vet ./...
+go test -count=1 ./...
+go build -trimpath -ldflags="-s -w" -o /tmp/grok2api .
+go run ./cmd/resilience-smoke -scenario mixed -duration 1s -concurrency 2 -timeout 500ms -max-error-rate 0.25 -max-p95-ms 1000
+go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/*.yml
+go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+```
+
+Keep release workflows separate from this gate: CI verifies source quality and supply-chain posture; Docker and release workflows publish artifacts only on their own triggers.
 
 ## First Deploy
 

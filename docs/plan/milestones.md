@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:59
+最后更新：2026-07-06 09:11
 
 # Milestones
 
@@ -15,3 +15,4 @@
 | Admin Asset Guardrails | Asset listing is bounded and destructive asset operations require precise validation. |
 | Admin Audit Events | Mutating admin operations emit sanitized audit events without raw token or payload leakage. |
 | Local Resilience Smoke | Local failure scenarios produce automated verdicts without touching production systems. |
+| Public CI Quality Gate | PRs run source, workflow, resilience, and vulnerability gates with least privilege. |

@@ -19,6 +19,7 @@
 - **资源边界与可观测性** — 请求体限制、全局/单模型 admission、`/metrics`、`/ready`
 - **安全审计事件** — 管理端变更会记录脱敏 `admin_audit` 事件，Token 仅以短哈希出现
 - **韧性烟测工具** — `cmd/load-smoke` 和 `cmd/resilience-smoke` 覆盖负载、延迟、5xx 和 timeout 场景
+- **公开 CI 门禁** — PR 自动运行 Go 测试、vet、构建、韧性烟测、actionlint 和 govulncheck
 - **多实例部署** — 基于文件锁的 Leader 选举，支持多进程运行
 - **多架构 Docker 镜像** — GHCR 自动构建 amd64 / arm64 / armv7
 
@@ -336,7 +337,7 @@ docker run -d \
 >
 > **指定版本**：`docker pull ghcr.io/deliciousbuding/grok2api:v1.0.1`，或用 commit 短哈希 `ghcr.io/deliciousbuding/grok2api:<sha>` 锁定具体构建。
 >
-> **发布流程**：`.github/workflows/build_docker.yml` 使用仓库 `GITHUB_TOKEN` 发布 GHCR 镜像，不需要自定义 PAT。
+> **发布流程**：`.github/workflows/ci.yml` 负责 PR 质量门禁；`.github/workflows/build_docker.yml` 使用仓库 `GITHUB_TOKEN` 发布 GHCR 镜像，不需要自定义 PAT。
 
 #### Docker Compose
 

@@ -1,4 +1,4 @@
-最后更新：2026-07-06 08:59
+最后更新：2026-07-06 09:11
 
 # Risk Assessment
 
@@ -27,6 +27,7 @@
 - Retry budget decisions are test-covered through a shared helper used by streaming and non-streaming paths.
 - Docker image build now includes the default config file, runs as a non-root user, and exposes image-level healthcheck metadata.
 - Release workflow publishes GHCR images with `GITHUB_TOKEN`, metadata tags, Buildx cache, provenance, and SBOM enabled.
+- Public CI now uses least-privilege permissions and gates module verification, `go vet`, full tests, binary build, resilience smoke, actionlint, and govulncheck.
 - Public Compose and operations runbook cover health checks, resource limits, update, backup, and rollback procedures.
 - Request-duration histograms expose route-pattern latency without token or path-parameter leakage.
 - Streaming chat and console paths enforce a configurable upstream idle timeout.
