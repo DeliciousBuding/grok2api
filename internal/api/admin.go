@@ -442,7 +442,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 						patch := account.Patch{Token: rec.Token, Pool: &inferred}
 						_, _ = s.Repo.PatchAccounts(patchCtx, []account.Patch{patch})
 						patchCancel()
-						logger.Infof("admin auto-detect pool: token=%s... previous=%s current=%s", rec.Token[:10], p, inferred)
+						logger.Infof("admin auto-detect pool: token=%s... previous=%s current=%s", platform.TokenLogPrefix(rec.Token), p, inferred)
 					}
 				}
 			}()

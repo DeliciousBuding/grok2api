@@ -135,19 +135,17 @@ func (s *RefreshService) refreshTokenOnce(ctx context.Context, tok string) (bool
 func (s *RefreshService) RefreshScheduled(ctx context.Context, pool string) (int, int, error) {
 	statusActive := StatusActive
 	statusCooling := StatusCooling
-	managed := 0
 	refreshed := 0
 	failed := 0
 	for _, st := range []Status{statusActive, statusCooling} {
-		page, err := s.repo.ListAccounts(ctx, ListQuery{Page: 1, PageSize: 2000, Status: &st})
+		records, err := s.listScheduledRecords(ctx, pool, st)
 		if err != nil {
 			return refreshed, failed, err
 		}
-		for _, rec := range page.Items {
+		for _, rec := range records {
 			if pool != "" && rec.Pool != pool {
 				continue
 			}
-			managed++
 			if _, err := s.refreshOne(ctx, rec, false); err != nil {
 				failed++
 				continue
@@ -155,8 +153,28 @@ func (s *RefreshService) RefreshScheduled(ctx context.Context, pool string) (int
 			refreshed++
 		}
 	}
-	_ = managed
 	return refreshed, failed, nil
+}
+
+func (s *RefreshService) listScheduledRecords(ctx context.Context, pool string, status Status) ([]*Record, error) {
+	records := []*Record{}
+	for pageNum := 1; ; pageNum++ {
+		page, err := s.repo.ListAccounts(ctx, ListQuery{
+			Page:     pageNum,
+			PageSize: 2000,
+			Pool:     pool,
+			Status:   &status,
+			SortBy:   "token",
+		})
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, page.Items...)
+		if len(page.Items) == 0 || page.Page >= page.TotalPages {
+			break
+		}
+	}
+	return records, nil
 }
 
 // RefreshOnDemand is a throttled full refresh (called after a 429 in quota mode).
@@ -225,7 +243,7 @@ func (s *RefreshService) refreshOne(ctx context.Context, rec *Record, bootstrap 
 	// Infer pool from live quota data and patch if changed.
 	inferred := InferPool(qs)
 	if inferred != "" && inferred != rec.Pool {
-		logger.Infof("account pool updated from live quota: token=%s... previous=%s current=%s", rec.Token[:10], rec.Pool, inferred)
+		logger.Infof("account pool updated from live quota: token=%s... previous=%s current=%s", platform.TokenLogPrefix(rec.Token), rec.Pool, inferred)
 		patch.Pool = &inferred
 	}
 	now := platform.NowMs()
@@ -300,7 +318,7 @@ func (s *RefreshService) markCredentialsExpired(ctx context.Context, rec *Record
 		ExtMerge:       ext,
 	}
 	_, err := s.repo.PatchAccounts(ctx, []Patch{patch})
-	logger.Warnf("account expired: token=%s... reason=%s", rec.Token[:10], reason)
+	logger.Warnf("account expired: token=%s... reason=%s", platform.TokenLogPrefix(rec.Token), reason)
 	return err
 }
 
