@@ -779,6 +779,40 @@ func TestFeedbackErrorPersistsFailureWithDeadline(t *testing.T) {
 	}
 }
 
+func TestFeedbackErrorSkipsLocalCancellation(t *testing.T) {
+	for _, err := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(err.Error(), func(t *testing.T) {
+			ctx := context.Background()
+			repo := account.NewTxtRepository(t.TempDir() + "/accounts.jsonl")
+			if err := repo.Initialize(ctx); err != nil {
+				t.Fatalf("initialize repo: %v", err)
+			}
+			if _, err := repo.UpsertAccounts(ctx, []account.Upsert{{Token: "tok-a", Pool: "basic"}}); err != nil {
+				t.Fatalf("upsert accounts: %v", err)
+			}
+			dir := account.NewDirectory(repo)
+			if err := dir.Bootstrap(ctx); err != nil {
+				t.Fatalf("bootstrap directory: %v", err)
+			}
+			server := NewServer(repo, dir, account.NewRefreshService(repo, nil), nil, nil)
+
+			before := *dir.Snapshot()[0]
+			server.feedbackError("tok-a", err, 1)
+			after := *dir.Snapshot()[0]
+
+			if after.FailCount != before.FailCount {
+				t.Fatalf("expected local cancellation not to increase fail count, before=%d after=%d", before.FailCount, after.FailCount)
+			}
+			if after.Health != before.Health {
+				t.Fatalf("expected local cancellation not to change health, before=%v after=%v", before.Health, after.Health)
+			}
+			if after.LastFailAt != before.LastFailAt {
+				t.Fatalf("expected local cancellation not to set last fail time, before=%d after=%d", before.LastFailAt, after.LastFailAt)
+			}
+		})
+	}
+}
+
 type apiBlockingQuotaFetcher struct {
 	started chan string
 	release chan struct{}

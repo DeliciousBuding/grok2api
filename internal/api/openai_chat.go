@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -457,6 +458,9 @@ func (s *Server) feedback(token string, kind account.FeedbackKind, modeID int, r
 
 // feedbackError posts an error outcome to the directory.
 func (s *Server) feedbackError(token string, err error, modeID int) {
+	if isLocalCancellation(err) {
+		return
+	}
 	var appErr *platform.AppError
 	if !asAppError(err, &appErr) {
 		appErr = platform.NewAppError(err.Error(), platform.ErrServer, "internal_error", 500)
@@ -478,6 +482,10 @@ func (s *Server) feedbackError(token string, err error, modeID int) {
 		defer cancel()
 		s.Refresh.RecordFailure(ctx, token, modeID, appErr)
 	}
+}
+
+func isLocalCancellation(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // readAllBody reads up to limit bytes from r and returns the body.
