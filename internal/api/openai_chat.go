@@ -589,8 +589,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 				chunk := makeStreamChunk(completionID, created, modelName, md, "", false)
 				sw.writeJSONData(chunk)
 			case grok.ImagineEventError:
-				s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
-				sw.writeOpenAIError(ev.Error, "upstream_error", "", "")
+				s.writeWSImageStreamFailure(sw, req.Model, lease, platform.UpstreamError(ev.Error, http.StatusBadGateway, ""))
 				return
 			}
 		}
@@ -598,9 +597,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		if imageChunks == 0 {
 			err := platform.UpstreamError("no generated images returned", http.StatusBadGateway, "")
 			s.metricsRegistry().IncEmptyOutput("image_ws", req.Model)
-			s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
-			sw.writeOpenAIAppError(err)
-			s.feedbackError(lease.Token, err, lease.ModeID)
+			s.writeWSImageStreamFailure(sw, req.Model, lease, err)
 			return
 		}
 
@@ -686,6 +683,19 @@ func buildWSImageStreamMarkdown(url string) (string, bool) {
 	}
 	url = grok.ImageBaseURL + strings.TrimPrefix(url, "/")
 	return "![image](" + url + ")", true
+}
+
+func (s *Server) writeWSImageStreamFailure(sw *sseWriter, modelName string, lease *account.Lease, err error) {
+	status := http.StatusBadGateway
+	var appErr *platform.AppError
+	if asAppError(err, &appErr) && appErr.Status > 0 {
+		status = appErr.Status
+	}
+	s.metricsRegistry().IncUpstreamStatus("image_ws", modelName, status)
+	sw.writeOpenAIAppError(err)
+	if lease != nil {
+		s.feedbackError(lease.Token, err, lease.ModeID)
+	}
 }
 
 // extractImagePrompt extracts the text prompt from chat messages.

@@ -1126,6 +1126,26 @@ func TestBuildWSImageStreamMarkdownRejectsMissingURL(t *testing.T) {
 	}
 }
 
+func TestWriteWSImageStreamFailureRecordsMetricsAndFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	rec := httptest.NewRecorder()
+	sw := newSSEWriter(rec)
+
+	server.writeWSImageStreamFailure(sw, "grok-imagine-image", &account.Lease{Token: "tok-a", ModeID: 1}, platform.UpstreamError("upstream failed", http.StatusBadGateway, ""))
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"error"`) || !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected SSE error frame and done marker, got %q", body)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-image",status="502",surface="image_ws"} 1`) {
+		t.Fatalf("expected image_ws 502 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="server_error"} 1`) {
+		t.Fatalf("expected server_error feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
