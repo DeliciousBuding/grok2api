@@ -1,4 +1,4 @@
-最后更新：2026-07-06 16:45
+最后更新：2026-07-06 17:05
 
 # Operations Runbook
 
@@ -142,6 +142,8 @@ Admin batch endpoints use fixed worker pools bounded by the `concurrency` query 
 Use account tags for soft workload routing. Add tags through the admin token APIs, then send `grok2api_prefer_tags` on `/v1/chat/completions` or `/v1/responses` requests. The selector prefers accounts that contain all requested tags, but falls back to the normal candidate set when none are available; use separate API keys, admission limits, or deployments when strict tenant isolation is required.
 
 Quota refresh requests deduplicate repeated tokens in one batch and coalesce concurrent refreshes for the same token inside one process. This reduces success-feedback and admin-refresh fan-out under high concurrency; it is not a distributed lock across multiple running gateway instances.
+
+When any mode-level quota refresh observes an upstream invalid-credentials response, the refresh cancels the sibling mode requests and returns the credential error promptly. This prevents one expired account from waiting on unrelated per-mode request timeouts before it can be marked expired.
 
 Scheduled quota refresh scans account pages in stable token order before applying mutations, so account pools larger than one backend page and accounts expiring during a refresh pass are not skipped.
 
