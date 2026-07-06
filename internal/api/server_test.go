@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -350,6 +352,73 @@ func TestVideoAdmissionReleasesWhenBackgroundJobFails(t *testing.T) {
 			t.Fatalf("expected video admission to release after failed background job, snapshot=%v", server.Admission.Snapshot())
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestVideoJobSnapshotIsRaceSafeDuringFailureUpdates(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	job := &videoJob{
+		ID:        "video_test",
+		Object:    "video",
+		CreatedAt: 1,
+		Status:    "queued",
+		Model:     "grok-imagine-video",
+		Prompt:    "a city",
+		Seconds:   6,
+		Size:      "720x1280",
+		Quality:   "standard",
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				server.failVideoJob(job, "upstream failed")
+			}
+		}()
+	}
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				_ = job.toDict()
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestRegisterVideoJobPrunesOldJobs(t *testing.T) {
+	resetVideoJobsForTest(t)
+
+	for i := 0; i < maxVideoJobs+1; i++ {
+		registerVideoJob(&videoJob{
+			ID:        fmt.Sprintf("video_%04d", i),
+			Object:    "video",
+			CreatedAt: int64(i),
+			Status:    "queued",
+			Model:     "grok-imagine-video",
+			Prompt:    "a city",
+			Seconds:   6,
+			Size:      "720x1280",
+			Quality:   "standard",
+		})
+	}
+
+	if lookupVideoJob("video_0000") != nil {
+		t.Fatal("oldest video job should be pruned after registry exceeds the retention limit")
+	}
+	if lookupVideoJob("video_1024") == nil {
+		t.Fatal("newest video job should be retained")
+	}
+	videoJobsMutex.Lock()
+	size := len(videoJobsMap)
+	videoJobsMutex.Unlock()
+	if size != maxVideoJobs {
+		t.Fatalf("expected video job registry size %d, got %d", maxVideoJobs, size)
 	}
 }
 
@@ -909,3 +978,16 @@ func (r *snapshotRepo) RecoverConsoleExpiredAccounts(ctx context.Context) (int, 
 	return 0, nil
 }
 func (r *snapshotRepo) Close(ctx context.Context) error { return nil }
+
+func resetVideoJobsForTest(t *testing.T) {
+	t.Helper()
+	videoJobsMutex.Lock()
+	old := videoJobsMap
+	videoJobsMap = map[string]*videoJob{}
+	videoJobsMutex.Unlock()
+	t.Cleanup(func() {
+		videoJobsMutex.Lock()
+		videoJobsMap = old
+		videoJobsMutex.Unlock()
+	})
+}

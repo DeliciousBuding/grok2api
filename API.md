@@ -344,6 +344,8 @@ curl -X POST http://localhost:8000/v1/videos \
 
 Poll video job status. When `status` is `"completed"`, `video_url` is populated.
 
+Video job state is stored in memory and bounded to the most recent 1024 jobs. Older job IDs may return `video_not_found` after the registry reaches that limit.
+
 ### `GET /v1/videos/{id}/content`
 
 Download the completed video file (MP4).
