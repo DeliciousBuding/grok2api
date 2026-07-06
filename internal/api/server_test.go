@@ -429,6 +429,64 @@ func TestRegisterVideoJobPrunesOldJobs(t *testing.T) {
 	}
 }
 
+func TestCompleteVideoJobRecordsMetricsAndFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	job := &videoJob{
+		ID:        "video_test",
+		Object:    "video",
+		CreatedAt: 1,
+		Status:    "in_progress",
+		Model:     "grok-imagine-video",
+		Prompt:    "a city",
+		Seconds:   6,
+		Size:      "720x1280",
+		Quality:   "standard",
+	}
+
+	server.completeVideoJob(job, "grok-imagine-video", &account.Lease{Token: "tok-a", ModeID: 1}, "https://assets.grok.com/video.mp4")
+
+	snapshot := job.toDict()
+	if snapshot["status"] != "completed" || snapshot["video_url"] != "https://assets.grok.com/video.mp4" {
+		t.Fatalf("expected completed video job, got %#v", snapshot)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-video",status="200",surface="video"} 1`) {
+		t.Fatalf("expected video 200 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="success"} 1`) {
+		t.Fatalf("expected success feedback metric, got:\n%s", rendered)
+	}
+}
+
+func TestFailVideoJobWithAccountFeedbackRecordsMetricsAndFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	job := &videoJob{
+		ID:        "video_test",
+		Object:    "video",
+		CreatedAt: 1,
+		Status:    "in_progress",
+		Model:     "grok-imagine-video",
+		Prompt:    "a city",
+		Seconds:   6,
+		Size:      "720x1280",
+		Quality:   "standard",
+	}
+
+	server.failVideoJobWithAccountFeedback(job, "grok-imagine-video", &account.Lease{Token: "tok-a", ModeID: 1}, platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
+
+	snapshot := job.toDict()
+	if snapshot["status"] != "failed" {
+		t.Fatalf("expected failed video job, got %#v", snapshot)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-video",status="429",surface="video"} 1`) {
+		t.Fatalf("expected video 429 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="rate_limited"} 1`) {
+		t.Fatalf("expected rate_limited feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestAdminTokensListUsesBoundedPagination(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	repo := &snapshotRepo{listPage: &account.Page{

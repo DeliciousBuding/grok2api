@@ -857,10 +857,7 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 		grok.WithTimeout(timeout),
 		grok.WithReferer("https://grok.com/imagine"))
 	if err != nil {
-		if shouldRecordUpstreamStatus(err) {
-			s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
-		}
-		s.failVideoJob(job, "video upstream: "+err.Error())
+		s.failVideoJobWithAccountFeedback(job, modelName, lease, err)
 		return
 	}
 	defer bodyReader.Close()
@@ -886,18 +883,41 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 			}
 		}
 	}
-
-	if len(adapter.ImageURLs) > 0 {
-		job.complete(adapter.ImageURLs[0][0])
-		s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusOK)
+	if err := scanner.Err(); err != nil {
+		s.failVideoJobWithAccountFeedback(job, modelName, lease, platform.UpstreamError("read video stream failed: "+err.Error(), http.StatusBadGateway, ""))
 		return
 	}
-	s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusBadGateway)
-	s.failVideoJob(job, "no video URL in upstream response")
+
+	if len(adapter.ImageURLs) > 0 {
+		s.completeVideoJob(job, modelName, lease, adapter.ImageURLs[0][0])
+		return
+	}
+	s.failVideoJobWithAccountFeedback(job, modelName, lease, platform.UpstreamError("no video URL in upstream response", http.StatusBadGateway, ""))
 }
 
 func (s *Server) failVideoJob(job *videoJob, message string) {
 	job.fail(message)
+}
+
+func (s *Server) completeVideoJob(job *videoJob, modelName string, lease *account.Lease, videoURL string) {
+	job.complete(videoURL)
+	s.metricsRegistry().IncUpstreamStatus("video", modelName, http.StatusOK)
+	if lease != nil {
+		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+	}
+}
+
+func (s *Server) failVideoJobWithAccountFeedback(job *videoJob, modelName string, lease *account.Lease, err error) {
+	if err == nil {
+		err = platform.UpstreamError("video generation failed", http.StatusBadGateway, "")
+	}
+	if shouldRecordUpstreamStatus(err) {
+		s.metricsRegistry().IncUpstreamStatus("video", modelName, metricStatusCode(err))
+	}
+	s.failVideoJob(job, "video upstream: "+err.Error())
+	if lease != nil {
+		s.feedbackError(lease.Token, err, lease.ModeID)
+	}
 }
 
 func (j *videoJob) markInProgress() {
