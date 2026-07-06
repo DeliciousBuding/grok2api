@@ -732,7 +732,8 @@ func recordLess(a, b *Record, sortBy string) bool {
 }
 
 func sqliteAccountDSN(path string) string {
-	return "file:" + escapeSQLiteURIPath(filepath.ToSlash(path)) + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
+	uriPath := strings.ReplaceAll(filepath.ToSlash(path), "\\", "/")
+	return "file:" + escapeSQLiteURIPath(uriPath) + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
 }
 
 func escapeSQLiteURIPath(path string) string {
