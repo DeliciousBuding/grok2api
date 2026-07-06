@@ -227,8 +227,15 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 		writeAppError(c, err)
 		return
 	}
-	s.metricsRegistry().IncUpstreamStatus("image_ws", spec.ModelName, http.StatusOK)
+	s.writeWSImageGenerationSuccess(spec.ModelName, lease)
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": out})
+}
+
+func (s *Server) writeWSImageGenerationSuccess(modelName string, lease *account.Lease) {
+	s.metricsRegistry().IncUpstreamStatus("image_ws", modelName, http.StatusOK)
+	if lease != nil {
+		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
+	}
 }
 
 func (s *Server) writeWSImageGenerationEmptyOutput(c *gin.Context, modelName string, lease *account.Lease) {

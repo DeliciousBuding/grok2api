@@ -1220,6 +1220,20 @@ func TestWriteWSImageGenerationEmptyOutputRecordsMetricsAndFeedback(t *testing.T
 	}
 }
 
+func TestWriteWSImageGenerationSuccessRecordsMetricsAndFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+
+	server.writeWSImageGenerationSuccess("grok-imagine-image", &account.Lease{Token: "tok-a", ModeID: 1})
+
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-imagine-image",status="200",surface="image_ws"} 1`) {
+		t.Fatalf("expected image_ws 200 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="success"} 1`) {
+		t.Fatalf("expected success feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
