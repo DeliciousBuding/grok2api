@@ -120,6 +120,7 @@ stream_idle_sec = 60
 max_download_bytes = 31457280
 max_inline_image_bytes = 31457280
 max_fetch_image_bytes = 52428800
+max_fetch_image_concurrency = 0
 
 [upstream]
 max_response_bytes = 16777216
@@ -136,6 +137,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `asset.max_inline_image_bytes` caps each multipart source image submitted to the image-edit endpoint. Oversized files return `image_file_too_large` instead of being truncated.
 
 `asset.max_fetch_image_bytes` caps image bytes downloaded for `response_format=b64_json`. These downloads inherit the client request context, so client cancellation stops the outbound fetch. Non-2xx image responses and oversized images fail instead of returning encoded error pages or truncated images.
+
+`asset.max_fetch_image_concurrency` caps simultaneous remote image downloads for `response_format=b64_json`. Set it when many image results can be converted in parallel and the process needs a predictable outbound-download ceiling; queued fetches still honor client cancellation. `0` preserves the historical unlimited behavior.
 
 Chat-routed lite image generation also checks the client request context before starting fan-out workers, so already-canceled requests do not reserve accounts or start upstream image attempts.
 
