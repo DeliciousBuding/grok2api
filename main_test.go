@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"testing"
@@ -93,6 +94,28 @@ func TestDirectorySyncIntervalsKeepPositiveValues(t *testing.T) {
 	if active != 7 {
 		t.Fatalf("expected active sync interval 7, got %d", active)
 	}
+}
+
+func TestConsoleLoopsTolerateNonPositiveIntervalsWhenCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	mustNotPanic(t, "console reset loop", func() {
+		runConsoleResetLoop(ctx, nil, 0)
+	})
+	mustNotPanic(t, "console recovery loop", func() {
+		runConsoleRecoveryLoop(ctx, nil, -5)
+	})
+}
+
+func mustNotPanic(t *testing.T, name string, fn func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("%s panicked: %v", name, r)
+		}
+	}()
+	fn()
 }
 
 func loadMainTestConfig(t *testing.T, body string) {

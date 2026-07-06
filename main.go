@@ -154,14 +154,14 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		runConsoleResetLoop(ctx, refreshSvc, 30)
+		runConsoleResetLoop(ctx, refreshSvc, defaultConsoleResetInterval)
 	}()
 
 	// 10d. Console-expired recovery loop.
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		runConsoleRecoveryLoop(ctx, refreshSvc, 600)
+		runConsoleRecoveryLoop(ctx, refreshSvc, defaultConsoleRecoveryInterval)
 	}()
 
 	// 11. Start the HTTP server.
@@ -221,6 +221,9 @@ const (
 	defaultDirectorySyncIdleInterval   = 30
 	defaultDirectorySyncActiveInterval = 3
 	defaultDirectorySyncIdleAfter      = 5
+
+	defaultConsoleResetInterval    = 30
+	defaultConsoleRecoveryInterval = 600
 )
 
 func newHTTPServerFromConfig(addr string, handler http.Handler, cfg *config.Snapshot) *http.Server {
@@ -305,9 +308,7 @@ func directorySyncIntervals(idleInterval, activeInterval int) (int, int) {
 
 // runRefreshLoop calls refreshSvc.RefreshScheduled for the pool at the configured interval.
 func runRefreshLoop(ctx context.Context, refresh *account.RefreshService, pool string, intervalSec int) {
-	if intervalSec <= 0 {
-		intervalSec = defaultRefreshInterval(pool)
-	}
+	intervalSec = positiveIntervalSec(intervalSec, defaultRefreshInterval(pool))
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -327,6 +328,7 @@ func runRefreshLoop(ctx context.Context, refresh *account.RefreshService, pool s
 
 // runConsoleResetLoop calls reset_expired_console_windows periodically.
 func runConsoleResetLoop(ctx context.Context, refresh *account.RefreshService, intervalSec int) {
+	intervalSec = positiveIntervalSec(intervalSec, defaultConsoleResetInterval)
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -348,6 +350,7 @@ func runConsoleResetLoop(ctx context.Context, refresh *account.RefreshService, i
 
 // runConsoleRecoveryLoop calls recover_console_expired_accounts periodically.
 func runConsoleRecoveryLoop(ctx context.Context, refresh *account.RefreshService, intervalSec int) {
+	intervalSec = positiveIntervalSec(intervalSec, defaultConsoleRecoveryInterval)
 	ticker := time.NewTicker(time.Duration(intervalSec) * time.Second)
 	defer ticker.Stop()
 	for {
@@ -391,6 +394,13 @@ func defaultRefreshInterval(pool string) int {
 		return 7200
 	}
 	return 7200
+}
+
+func positiveIntervalSec(intervalSec, def int) int {
+	if intervalSec <= 0 {
+		return def
+	}
+	return intervalSec
 }
 
 func envOrDefault(key, def string) string {
