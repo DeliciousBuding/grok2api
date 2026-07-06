@@ -3,6 +3,7 @@
 package platform
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,21 @@ func DataDir() string {
 // DataPath joins a relative path under the data directory.
 func DataPath(parts ...string) string {
 	return filepath.Join(append([]string{DataDir()}, parts...)...)
+}
+
+// SQLiteFileDSN builds a URI filename DSN for modernc.org/sqlite while
+// preserving literal path metacharacters before appending SQLite pragmas.
+func SQLiteFileDSN(path string) string {
+	uriPath := strings.ReplaceAll(filepath.ToSlash(path), "\\", "/")
+	return "file:" + escapeSQLiteURIPath(uriPath) + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
+}
+
+func escapeSQLiteURIPath(path string) string {
+	parts := strings.Split(path, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }
 
 // LogDir returns the configured log directory (env LOG_DIR, default ./logs).

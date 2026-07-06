@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -732,16 +731,7 @@ func recordLess(a, b *Record, sortBy string) bool {
 }
 
 func sqliteAccountDSN(path string) string {
-	uriPath := strings.ReplaceAll(filepath.ToSlash(path), "\\", "/")
-	return "file:" + escapeSQLiteURIPath(uriPath) + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
-}
-
-func escapeSQLiteURIPath(path string) string {
-	parts := strings.Split(path, "/")
-	for i, part := range parts {
-		parts[i] = url.PathEscape(part)
-	}
-	return strings.Join(parts, "/")
+	return platform.SQLiteFileDSN(path)
 }
 
 const sqliteAccountSchema = `

@@ -15,6 +15,7 @@ import (
 
 	"github.com/DeliciousBuding/grok2api/internal/config"
 	"github.com/DeliciousBuding/grok2api/internal/logger"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // lowWatermarkRatio is the cache target after an eviction sweep (60% of max).
@@ -318,8 +319,7 @@ func (s *LocalMediaCacheStore) connect() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	dsn := "file:" + dbPath + "?_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=busy_timeout(5000)"
-	db, err := sql.Open("sqlite", dsn)
+	db, err := sql.Open("sqlite", sqliteMediaCacheDSN(dbPath))
 	if err != nil {
 		return nil, err
 	}
@@ -329,6 +329,10 @@ func (s *LocalMediaCacheStore) connect() (*sql.DB, error) {
 		return nil, err
 	}
 	return db, nil
+}
+
+func sqliteMediaCacheDSN(path string) string {
+	return platform.SQLiteFileDSN(path)
 }
 
 func (s *LocalMediaCacheStore) ensureSchema(db *sql.DB, dbPath string) error {
