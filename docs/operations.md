@@ -129,6 +129,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 `asset.max_fetch_image_bytes` caps image bytes downloaded for `response_format=b64_json`. These downloads inherit the client request context, so client cancellation stops the outbound fetch. Non-2xx image responses and oversized images fail instead of returning encoded error pages or truncated images.
 
+Chat-routed lite image generation also checks the client request context before starting fan-out workers, so already-canceled requests do not reserve accounts or start upstream image attempts.
+
 `upstream.max_response_bytes` caps non-streaming JSON and gRPC-web response bodies read into memory. SSE streaming responses are governed by request timeouts and stream idle timeouts instead.
 
 Non-2xx upstream responses use a small bounded body sample for diagnostics rather than the full success-response cap. This keeps error handling predictable when an upstream service returns a large HTML or JSON error body.

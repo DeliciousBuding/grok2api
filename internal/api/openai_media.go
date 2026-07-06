@@ -332,6 +332,9 @@ func readImageEditFileBytes(r io.Reader) ([]byte, error) {
 
 // captureImageURLs runs the non-streaming chat path and extracts any image URLs.
 func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, spec *model.Spec) []string {
+	if err := r.Context().Err(); err != nil {
+		return nil
+	}
 	cw := &captureWriter{}
 
 	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil, req.preferTags())
@@ -386,13 +389,23 @@ func (s *Server) captureLiteImageBatch(r *http.Request, spec *model.Spec, prompt
 	if n <= 0 {
 		n = 1
 	}
+	ctx := r.Context()
+	if err := ctx.Err(); err != nil {
+		return nil
+	}
 	results := make([]string, n)
 	var wg sync.WaitGroup
 
 	for i := 0; i < n; i++ {
+		if err := ctx.Err(); err != nil {
+			break
+		}
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
+			if err := ctx.Err(); err != nil {
+				return
+			}
 			msgs := []map[string]any{{"role": "user", "content": prompt}}
 			chatReq := &chatCompletionRequest{
 				Model:    spec.ModelName,

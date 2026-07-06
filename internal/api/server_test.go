@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/model"
 )
 
 func TestRequestSizeMiddlewareRejectsOversizedBody(t *testing.T) {
@@ -780,6 +781,29 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "image fetch exceeds") {
 		t.Fatalf("expected size-limit error, got %v", err)
+	}
+}
+
+func TestCaptureLiteImageBatchHonorsCanceledContextBeforeFanout(t *testing.T) {
+	loadTestConfig(t, "")
+	spec, ok := model.Resolve("grok-imagine-image-lite")
+	if !ok {
+		t.Fatal("resolve image test model")
+	}
+	repo := &snapshotRepo{items: []*account.Record{account.NewRecord("tok-ready")}}
+	dir := account.NewDirectory(repo)
+	if err := dir.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	server := NewServer(repo, dir, nil, nil, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil).WithContext(ctx)
+
+	got := server.captureLiteImageBatch(req, spec, "Drawing: canceled", 4)
+	if len(got) != 0 {
+		t.Fatalf("expected canceled batch to return no image URLs, got %v", got)
 	}
 }
 
