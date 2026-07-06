@@ -14,6 +14,16 @@ max_files = 7
 [server]
 # 请求体最大字节数，0 = 不限制。生产建议按入口网关限制同步设置。
 max_body_bytes = 0
+# HTTP 请求头读取超时（秒），0 = 禁用。
+read_header_timeout_sec = 30
+# HTTP 请求体读取超时（秒），0 = 禁用；大文件/慢客户端环境谨慎设置。
+read_timeout_sec = 0
+# HTTP 响应写入超时（秒），0 = 禁用；长流式响应通常保持 0。
+write_timeout_sec = 0
+# Keep-alive 空闲连接超时（秒），0 = 禁用。
+idle_timeout_sec = 120
+# SIGINT/SIGTERM 后 graceful shutdown 等待时间（秒）。
+shutdown_timeout_sec = 15
 
 # ==================== Admission Control ====================
 [admission]

@@ -219,6 +219,11 @@ max_files = 7                   # 日志文件最大保留数
 
 [server]
 max_body_bytes = 0              # 请求体最大字节数，0 = 不限制
+read_header_timeout_sec = 30    # HTTP 请求头读取超时（秒），0 = 禁用
+read_timeout_sec = 0            # HTTP 请求体读取超时（秒），0 = 禁用
+write_timeout_sec = 0           # HTTP 响应写入超时（秒），长流式响应通常保持 0
+idle_timeout_sec = 120          # Keep-alive 空闲连接超时（秒），0 = 禁用
+shutdown_timeout_sec = 15       # SIGINT/SIGTERM graceful shutdown 等待时间（秒）
 
 [admission]
 global_max_inflight = 0         # 全局写请求并发上限，0 = 不限制
@@ -315,7 +320,7 @@ timeout = 60                    # NSFW 设置超时（秒）
 | `GROK_SECTION_KEY` | 配置覆盖（映射到 `section.key`） | _(空)_ |
 
 > `GROK_*` 环境变量可用于覆盖任意配置项。例如 `GROK_FEATURES_STREAM=false` 等同于 `features.stream = false`。
-> `account.storage.*`、`account.local.*`、`account.sqlite.*`、`account.postgresql.*`、`account.redis.*` 属于启动期配置，不能通过管理 API 热更新；修改后需要重启进程或容器。
+> `account.storage.*`、`account.local.*`、`account.sqlite.*`、`account.postgresql.*`、`account.redis.*` 以及 `server.*_timeout_sec` 属于启动期配置，不能通过管理 API 热更新；修改后需要重启进程或容器。
 
 ### 账号存储后端
 
