@@ -94,6 +94,14 @@ func StreamIdleTimeout(timeoutS int) *AppError {
 	}
 }
 
+// TokenLogPrefix returns a short, non-panicking token prefix for logs.
+func TokenLogPrefix(token string) string {
+	if len(token) <= 10 {
+		return token
+	}
+	return token[:10]
+}
+
 // IsInvalidCredentialsBody returns true when an upstream response body
 // indicates the SSO token is no longer valid.
 func IsInvalidCredentialsBody(body string) bool {
