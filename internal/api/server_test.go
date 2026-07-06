@@ -708,6 +708,82 @@ func TestStartAdminBackgroundTaskBoundsInflight(t *testing.T) {
 	}
 }
 
+func TestFeedbackBoundsAsyncQuotaRefreshTasks(t *testing.T) {
+	ctx := context.Background()
+	repo := account.NewTxtRepository(t.TempDir() + "/accounts.jsonl")
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("initialize repo: %v", err)
+	}
+	upserts := []account.Upsert{
+		{Token: "tok-a", Pool: "basic"},
+		{Token: "tok-b", Pool: "basic"},
+		{Token: "tok-c", Pool: "basic"},
+	}
+	if _, err := repo.UpsertAccounts(ctx, upserts); err != nil {
+		t.Fatalf("upsert accounts: %v", err)
+	}
+	dir := account.NewDirectory(repo)
+	if err := dir.Bootstrap(ctx); err != nil {
+		t.Fatalf("bootstrap directory: %v", err)
+	}
+	fetcher := &apiBlockingQuotaFetcher{
+		started: make(chan string, len(upserts)),
+		release: make(chan struct{}),
+	}
+	server := NewServer(repo, dir, account.NewRefreshService(repo, fetcher), nil, nil)
+	server.adminBackground = make(chan struct{}, 2)
+
+	for _, upsert := range upserts {
+		server.feedback(upsert.Token, account.FbSuccess, 1, nil, nil)
+	}
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-fetcher.started:
+		case <-time.After(time.Second):
+			t.Fatal("expected bounded quota refresh task to start")
+		}
+	}
+	select {
+	case token := <-fetcher.started:
+		t.Fatalf("quota refresh background gate should reject saturated task before release, but %s started", token)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(fetcher.release)
+	deadline := time.After(time.Second)
+	for {
+		if len(server.adminBackground) == 0 {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("quota refresh background tasks did not finish")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+type apiBlockingQuotaFetcher struct {
+	started chan string
+	release chan struct{}
+}
+
+func (f *apiBlockingQuotaFetcher) FetchAllQuotas(ctx context.Context, token, pool string, bootstrap bool) (map[int]account.ModeQuota, error) {
+	f.started <- token
+	select {
+	case <-f.release:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return map[int]account.ModeQuota{
+		1: {Remaining: 29, Total: 30, WindowSec: account.BasicFastWindowSec},
+	}, nil
+}
+
+func (f *apiBlockingQuotaFetcher) FetchModeQuota(ctx context.Context, token, pool string, modeID int) (*account.ModeQuota, error) {
+	return &account.ModeQuota{Remaining: 29, Total: 30, WindowSec: account.BasicFastWindowSec}, nil
+}
+
 func TestReadImageEditFileBytesRejectsOversizedInput(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_inline_image_bytes = 4\n")
 

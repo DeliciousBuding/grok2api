@@ -447,11 +447,9 @@ func (s *Server) feedback(token string, kind account.FeedbackKind, modeID int, r
 	// Fire-and-forget async quota sync for the used mode, mirroring
 	// refresh_call_async in the Python reference.
 	if kind == account.FbSuccess && s.Refresh != nil {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
+		s.tryStartAdminBackgroundTask(30*time.Second, func(ctx context.Context) {
 			_, _, _ = s.Refresh.RefreshTokens(ctx, []string{token})
-		}()
+		})
 	}
 }
 
