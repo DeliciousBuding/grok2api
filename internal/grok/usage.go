@@ -78,35 +78,51 @@ func NewUsageFetcher(t *Transport) *UsageFetcher { return &UsageFetcher{transpor
 // returned so the caller can mark the account expired.
 func (f *UsageFetcher) FetchAllQuotas(ctx context.Context, token, _ string, _ bool) (map[int]account.ModeQuota, error) {
 	modes := []int{0, 1, 2, 3, 4}
+	return fetchAllQuotaModes(ctx, modes, func(ctx context.Context, modeID int) (*account.ModeQuota, error) {
+		return f.fetchOne(ctx, token, modeID)
+	})
+}
+
+type quotaFetchFunc func(context.Context, int) (*account.ModeQuota, error)
+
+func fetchAllQuotaModes(ctx context.Context, modes []int, fetch quotaFetchFunc) (map[int]account.ModeQuota, error) {
 	type result struct {
 		modeID int
 		quota  *account.ModeQuota
 		err    error
 	}
-	results := make([]result, len(modes))
-	var wg sync.WaitGroup
-	for i, modeID := range modes {
-		wg.Add(1)
-		go func(idx, modeID int) {
-			defer wg.Done()
-			q, err := f.fetchOne(ctx, token, modeID)
-			results[idx] = result{modeID: modeID, quota: q, err: err}
-		}(i, modeID)
-	}
-	wg.Wait()
+	reqCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	// Surface the first invalid-credentials error to the caller.
-	for _, r := range results {
-		if r.err == nil {
-			continue
-		}
-		if appErr, ok := r.err.(*platform.AppError); ok {
-			if (appErr.Status == 400 || appErr.Status == 401 || appErr.Status == 403) &&
-				platform.IsInvalidCredentialsBody(appErr.Body) {
-				return nil, r.err
-			}
+	resultsCh := make(chan result, len(modes))
+	var wg sync.WaitGroup
+	for _, modeID := range modes {
+		wg.Add(1)
+		go func(modeID int) {
+			defer wg.Done()
+			q, err := fetch(reqCtx, modeID)
+			resultsCh <- result{modeID: modeID, quota: q, err: err}
+		}(modeID)
+	}
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	var results []result
+	var invalidCredentialsErr error
+	for r := range resultsCh {
+		results = append(results, r)
+		if invalidCredentialsErr == nil && isInvalidCredentialsQuotaError(r.err) {
+			invalidCredentialsErr = r.err
+			cancel()
 		}
 	}
+
+	if invalidCredentialsErr != nil {
+		return nil, invalidCredentialsErr
+	}
+
 	out := map[int]account.ModeQuota{}
 	for _, r := range results {
 		if r.quota == nil {
@@ -118,6 +134,18 @@ func (f *UsageFetcher) FetchAllQuotas(ctx context.Context, token, _ string, _ bo
 		return nil, nil
 	}
 	return out, nil
+}
+
+func isInvalidCredentialsQuotaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	appErr, ok := err.(*platform.AppError)
+	if !ok {
+		return false
+	}
+	return (appErr.Status == 400 || appErr.Status == 401 || appErr.Status == 403) &&
+		platform.IsInvalidCredentialsBody(appErr.Body)
 }
 
 // FetchModeQuota fetches the quota for a single mode.
