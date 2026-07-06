@@ -557,6 +557,8 @@ Batch endpoints accept a bounded `concurrency` query parameter. Invalid, zero, o
 | `GET` | `/admin/api/storage` | Get storage info |
 | `POST` | `/admin/api/sync` | Force directory sync |
 
+`GET /admin/api/storage` returns the active account repository backend as `{"type":"jsonl"}` or `{"type":"sqlite"}`. This is startup state; changing storage backend config still requires a restart.
+
 ### Assets
 
 | Method | Path | Description |
@@ -766,6 +768,7 @@ All errors follow this format:
 | Error Type | HTTP Status | Common Causes |
 |---|---|---|
 | `invalid_request_error` | 400 | Invalid model, missing required fields, bad JSON |
+| `invalid_request_error` | 413 | Request body exceeds `server.max_body_bytes`; response code is `request_body_too_large` |
 | `authentication_error` | 401 | Missing or invalid API key |
 | `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |
 | `upstream_error` | 502 | Grok upstream returned an error |

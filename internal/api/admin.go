@@ -26,7 +26,18 @@ import (
 // --- System endpoints ---
 
 func (s *Server) handleStorageGet(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"type": "jsonl"})
+	c.JSON(http.StatusOK, gin.H{"type": repositoryStorageType(s.Repo)})
+}
+
+func repositoryStorageType(repo account.Repository) string {
+	switch repo.(type) {
+	case *account.SQLiteRepository:
+		return "sqlite"
+	case *account.TxtRepository:
+		return "jsonl"
+	default:
+		return "unknown"
+	}
 }
 
 func (s *Server) handleStatusGet(c *gin.Context) {
