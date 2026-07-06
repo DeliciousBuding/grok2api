@@ -46,11 +46,20 @@ func TestGenerateValid(t *testing.T) {
 	t.Logf("OK: valid & SHA-consistent (number=%d, key=%d)", number, key)
 }
 
-// TestTwoCallsDiffer ensures a random key per call.
-func TestTwoCallsDiffer(t *testing.T) {
-	a, _ := Generate("/rest/app-chat/conversations/new", "POST", time.Now().Unix())
-	b, _ := Generate("/rest/app-chat/conversations/new", "POST", time.Now().Unix())
+// TestBuildOutputDependsOnKey verifies the encoded statsig changes with the
+// one-byte XOR key without relying on probabilistic collision-prone randomness.
+func TestBuildOutputDependsOnKey(t *testing.T) {
+	seed := mustDecodeSeed(defaultSeedB64)
+	now := time.Now().Unix()
+	a, err := buildWithKey(seed, defaultHEX, "/rest/app-chat/conversations/new", "POST", now, 1)
+	if err != nil {
+		t.Fatalf("build with key 1: %v", err)
+	}
+	b, err := buildWithKey(seed, defaultHEX, "/rest/app-chat/conversations/new", "POST", now, 2)
+	if err != nil {
+		t.Fatalf("build with key 2: %v", err)
+	}
 	if a == b {
-		t.Fatal("two calls produced identical statsig (expected random key)")
+		t.Fatal("different XOR keys produced identical statsig")
 	}
 }

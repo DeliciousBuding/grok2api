@@ -96,6 +96,14 @@ func Generate(pathname, method string, nowUnix int64) (string, error) {
 
 // build assembles the 70-byte statsig from a (seed, HEX) pair.
 func build(seed []byte, hex, pathname, method string, nowUnix int64) (string, error) {
+	var keyB [1]byte
+	if _, err := rand.Read(keyB[:]); err != nil {
+		return "", err
+	}
+	return buildWithKey(seed, hex, pathname, method, nowUnix, keyB[0])
+}
+
+func buildWithKey(seed []byte, hex, pathname, method string, nowUnix int64, key byte) (string, error) {
 	if len(seed) != 48 {
 		return "", errors.New("statsig: seed must be 48 bytes")
 	}
@@ -111,12 +119,6 @@ func build(seed []byte, hex, pathname, method string, nowUnix int64) (string, er
 	sb.WriteString(statsigSalt)
 	sb.WriteString(hex)
 	sha := sha256.Sum256([]byte(sb.String()))
-
-	var keyB [1]byte
-	if _, err := rand.Read(keyB[:]); err != nil {
-		return "", err
-	}
-	key := keyB[0]
 
 	out := make([]byte, 70)
 	out[0] = key
