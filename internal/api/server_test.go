@@ -705,6 +705,34 @@ func TestAdminBatchRejectsInvalidQueryValues(t *testing.T) {
 	}
 }
 
+func TestAdminBatchRejectsTooManyTokensBeforeWork(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	body := batchTokensJSON(adminMaxBatchTokens + 1)
+
+	for _, path := range []string{
+		"/admin/api/batch/nsfw",
+		"/admin/api/batch/refresh",
+		"/admin/api/batch/cache-clear",
+	} {
+		t.Run(path, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "too_many_tokens") {
+				t.Fatalf("expected too_many_tokens error, got %s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
 	started := make(chan struct{}, len(tokens))
@@ -2137,6 +2165,19 @@ func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, s
 		t.Fatalf("close multipart writer: %v", err)
 	}
 	return body, writer.FormDataContentType()
+}
+
+func batchTokensJSON(n int) string {
+	var b strings.Builder
+	b.WriteString(`{"tokens":[`)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `"tok-%04d"`, i)
+	}
+	b.WriteString(`]}`)
+	return b.String()
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

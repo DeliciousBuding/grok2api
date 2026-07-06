@@ -551,7 +551,7 @@ Replaces all tokens in one or more pools. Pool names must be valid and each pool
 | `POST` | `/admin/api/batch/refresh` | Trigger quota refresh |
 | `POST` | `/admin/api/batch/cache-clear` | Clear all caches |
 
-Batch endpoints accept a bounded `concurrency` query parameter. Invalid, zero, or oversized values return HTTP 400 with `invalid_concurrency`.
+Batch endpoints accept a bounded `concurrency` query parameter and at most 1000 unique valid tokens per request. Invalid, zero, or oversized concurrency values return HTTP 400 with `invalid_concurrency`; oversized token batches return `too_many_tokens`.
 
 | Query | Default | Limit | Description |
 |---|---:|---:|---|

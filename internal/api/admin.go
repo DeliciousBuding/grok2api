@@ -130,6 +130,7 @@ const (
 
 	adminDefaultBatchConcurrency = 50
 	adminMaxBatchConcurrency     = 80
+	adminMaxBatchTokens          = 1000
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000
@@ -856,9 +857,9 @@ func (s *Server) handleBatchNSFW(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tokens := sanitizeTokenList(body.Tokens)
-	if len(tokens) == 0 {
-		writeAppError(c, platform.ValidationError("No tokens provided", "tokens"))
+	tokens, err := sanitizeAdminBatchTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 300))
@@ -919,9 +920,9 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tokens := sanitizeTokenList(body.Tokens)
-	if len(tokens) == 0 {
-		writeAppError(c, platform.ValidationError("No tokens provided", "tokens"))
+	tokens, err := sanitizeAdminBatchTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
 		return
 	}
 	if s.Refresh == nil {
@@ -975,9 +976,9 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tokens := sanitizeTokenList(body.Tokens)
-	if len(tokens) == 0 {
-		writeAppError(c, platform.ValidationError("No tokens provided", "tokens"))
+	tokens, err := sanitizeAdminBatchTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
 		return
 	}
 	if s.Refresh == nil {
@@ -1603,6 +1604,21 @@ func sanitizeTokenList(raw []string) []string {
 		out = append(out, t)
 	}
 	return out
+}
+
+func sanitizeAdminBatchTokens(raw []string) ([]string, error) {
+	tokens := sanitizeTokenList(raw)
+	if len(tokens) == 0 {
+		return nil, platform.ValidationError("No tokens provided", "tokens")
+	}
+	if len(tokens) > adminMaxBatchTokens {
+		return nil, platform.ValidationErrorCode(
+			fmt.Sprintf("tokens must be <= %d", adminMaxBatchTokens),
+			"tokens",
+			"too_many_tokens",
+		)
+	}
+	return tokens, nil
 }
 
 func maskToken(t string) string {
