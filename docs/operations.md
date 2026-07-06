@@ -1,4 +1,4 @@
-最后更新：2026-07-06 17:05
+最后更新：2026-07-06 17:25
 
 # Operations Runbook
 
@@ -136,6 +136,8 @@ Non-2xx upstream responses use a small bounded body sample for diagnostics rathe
 Request-path config reload checks are throttled to avoid filesystem stat and TOML parsing amplification under load. `POST /admin/api/config` still persists changes and forces an immediate reload; if an externally edited config file is temporarily invalid, the previous in-memory snapshot remains in use until a valid reload succeeds.
 
 Admin batch endpoints use fixed worker pools bounded by the `concurrency` query parameter. This bounds goroutine growth for large token lists; tune `concurrency` for upstream pressure, not for request body size.
+
+Admin token imports start quota refresh work through a small bounded background task gate. If the gate is saturated, the import still records the tokens and logs a count-only skip event rather than spawning unbounded detached refresh goroutines.
 
 `GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
 

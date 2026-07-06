@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -29,6 +30,8 @@ type Server struct {
 	Admission  *admission.Controller
 	Metrics    *metrics.Registry
 	AdminAudit AdminAuditSink
+
+	adminBackground chan struct{}
 }
 
 // NewServer constructs a Server bound to the given dependencies.
@@ -41,7 +44,32 @@ func NewServer(repo account.Repository, dir *account.Directory, refresh *account
 		Media:     media,
 		Admission: admission.NewController(),
 		Metrics:   metrics.NewRegistry(),
+
+		adminBackground: make(chan struct{}, adminBackgroundConcurrency),
 	}
+}
+
+const adminBackgroundConcurrency = 2
+
+func (s *Server) tryStartAdminBackgroundTask(timeout time.Duration, work func(context.Context)) bool {
+	if work == nil {
+		return false
+	}
+	if s.adminBackground == nil {
+		s.adminBackground = make(chan struct{}, adminBackgroundConcurrency)
+	}
+	select {
+	case s.adminBackground <- struct{}{}:
+	default:
+		return false
+	}
+	go func() {
+		defer func() { <-s.adminBackground }()
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		work(ctx)
+	}()
+	return true
 }
 
 // Router builds the gin.Engine for the whole API surface.

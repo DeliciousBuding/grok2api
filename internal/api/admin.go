@@ -455,9 +455,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 	// Trigger async refresh + auto-detect pool for newly imported tokens.
 	if len(newTokens) > 0 && s.Refresh != nil {
 		if autoDetect {
-			go func() {
-				refCtx, refCancel := context.WithTimeout(context.Background(), timeoutClassDuration("admin", 120))
-				defer refCancel()
+			started := s.tryStartAdminBackgroundTask(timeoutClassDuration("admin", 120), func(refCtx context.Context) {
 				refreshed, failed, err := s.Refresh.RefreshTokens(refCtx, newTokens)
 				if err != nil {
 					return
@@ -465,7 +463,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 				_ = refreshed
 				_ = failed
 				// After refresh, check if pool was auto-inferred.
-				checkCtx, checkCancel := context.WithTimeout(context.Background(), 10*time.Second)
+				checkCtx, checkCancel := context.WithTimeout(refCtx, 10*time.Second)
 				defer checkCancel()
 				recs, _ := s.Repo.GetAccounts(checkCtx, newTokens)
 				for _, rec := range recs {
@@ -474,7 +472,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 					}
 					inferred := account.InferPool(rec.QuotaSet())
 					if inferred != "" && inferred != rec.Pool {
-						patchCtx, patchCancel := context.WithTimeout(context.Background(), 10*time.Second)
+						patchCtx, patchCancel := context.WithTimeout(refCtx, 10*time.Second)
 						p := rec.Pool
 						patch := account.Patch{Token: rec.Token, Pool: &inferred}
 						_, _ = s.Repo.PatchAccounts(patchCtx, []account.Patch{patch})
@@ -482,13 +480,17 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 						logger.Infof("admin auto-detect pool: token=%s... previous=%s current=%s", platform.TokenLogPrefix(rec.Token), p, inferred)
 					}
 				}
-			}()
+			})
+			if !started {
+				logger.Warnf("admin token import refresh skipped: background capacity exhausted count=%d auto_detect=true", len(newTokens))
+			}
 		} else {
-			go func() {
-				refCtx, refCancel := context.WithTimeout(context.Background(), timeoutClassDuration("admin", 120))
-				defer refCancel()
+			started := s.tryStartAdminBackgroundTask(timeoutClassDuration("admin", 120), func(refCtx context.Context) {
 				_, _, _ = s.Refresh.RefreshTokens(refCtx, newTokens)
-			}()
+			})
+			if !started {
+				logger.Warnf("admin token import refresh skipped: background capacity exhausted count=%d auto_detect=false", len(newTokens))
+			}
 		}
 	}
 

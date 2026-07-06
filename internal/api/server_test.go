@@ -665,6 +665,44 @@ func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	}
 }
 
+func TestStartAdminBackgroundTaskBoundsInflight(t *testing.T) {
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	server.adminBackground = make(chan struct{}, 1)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	if !server.tryStartAdminBackgroundTask(time.Second, func(ctx context.Context) {
+		close(started)
+		<-release
+	}) {
+		t.Fatal("expected first background task to start")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("background task did not start")
+	}
+
+	if server.tryStartAdminBackgroundTask(time.Second, func(ctx context.Context) {
+		t.Fatal("second background task should not start while capacity is exhausted")
+	}) {
+		t.Fatal("expected second background task to be rejected while capacity is exhausted")
+	}
+
+	close(release)
+	deadline := time.After(time.Second)
+	for {
+		if server.tryStartAdminBackgroundTask(time.Second, func(ctx context.Context) {}) {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal("background task slot was not released")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 func TestReadImageEditFileBytesRejectsOversizedInput(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_inline_image_bytes = 4\n")
 
