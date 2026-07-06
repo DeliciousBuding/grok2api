@@ -1,4 +1,4 @@
-最后更新：2026-07-06 09:22
+最后更新：2026-07-06 09:33
 
 # Progress Master
 
@@ -24,6 +24,7 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - [x] Phase 10: Admin Audit Events (4/4 tasks) — #10
 - [x] Phase 11: Local Resilience Smoke (4/4 tasks) — #11
 - [x] Phase 12: Public CI Quality Gate (4/4 tasks) — #12
+- [x] Phase 13: Archive and Mainline Publication (4/4 tasks)
 
 ## GitHub Tracking
 
@@ -39,6 +40,8 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 10 issue: https://github.com/DeliciousBuding/grok2api/issues/10
 - Phase 11 issue: https://github.com/DeliciousBuding/grok2api/issues/11
 - Phase 12 issue: https://github.com/DeliciousBuding/grok2api/issues/12
+- Merged PR: https://github.com/DeliciousBuding/grok2api/pull/1
+- Main merge commit: `d2e4d7e`
 
 ## Verification
 
@@ -110,11 +113,15 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Public-safety and relative-time greps had no matches during Phase 12; `git diff --check` reported a CRLF normalization warning only.
 - Phase 12 CI follow-up re-ran `go mod verify`, `go vet ./...`, `go test -count=1 ./...`, `go build -trimpath -ldflags "-s -w" -o <temp binary> .`, `go run ./cmd/resilience-smoke -scenario mixed -duration 1s -concurrency 2 -timeout 500ms -max-error-rate 0.25 -max-p95-ms 1000`, `go run github.com/rhysd/actionlint/cmd/actionlint@latest -color=false .github/workflows/ci.yml .github/workflows/build.yml .github/workflows/build_docker.yml`, `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`, `docker build -t grok2api:codex-phase12-ci-fix .`, and `docker compose -f deploy/compose.example.yml config`; all passed or reported no vulnerabilities.
 - Public-safety and relative-time greps had no matches during the Phase 12 CI follow-up.
+- PR #1 merged cleanly into `main` at `d2e4d7e`; Issues #2 through #12 were closed by the merge.
+- Main-branch CI run `28762036537` completed successfully.
+- Main-branch Docker publishing run `28762036545` completed successfully.
+- GHCR tags `latest`, `main`, `sha-d2e4d7e`, `1.0.1`, and `v1.0.1` resolve to OCI index digest `sha256:eb239353ce23f60a83dbdcc7c5b321dd27379662c1a875a81a4782da404b4018` with `linux/amd64`, `linux/arm64`, and `linux/arm/v7` manifests.
 
 ## Governance
 
 - Shared agent rules: `AGENTS.md`.
-- Public docs: `README.md`, `API.md`, `docs/analysis/`, `docs/plan/`, `docs/progress/`.
+- Public docs: `README.md`, `API.md`, `docs/operations.md`, `docs/archives/grok2api-enterprise-stability/`.
 - Memory surface: none inside the public repo; durable operator memory stays outside this repository unless explicitly requested.
 
 ## Notes
@@ -133,3 +140,4 @@ LOCAL_ONLY for the initial implementation pass. GitHub repository: `DeliciousBud
 - Phase 11 actual effort: medium. S.U.P.E.R score improved to high for local resilience validation and failure-scenario operability. Unplanned dependency count: 1 (network-level chaos against real upstream dependencies stays environment-specific).
 - Phase 12 actual effort: small-medium. S.U.P.E.R score improved to high for release-quality feedback loops and replaceable CI gates. Unplanned dependency count: 1 (actionlint directory path was not portable on Windows; CI uses explicit workflow globs).
 - Phase 12 CI follow-up actual effort: small. S.U.P.E.R score remains high for release feedback loops. Unplanned dependency count: 1 (remote workflow lint surfaced an existing Docker workflow output-write pattern once all workflows were linted together).
+- Phase 13 archive actual effort: small. S.U.P.E.R score remains high for governance and replaceability. Unplanned dependency count: 0.
