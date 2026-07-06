@@ -1402,6 +1402,85 @@ func TestFinishCapturedImageURLsRecordsUpstreamFailureFeedback(t *testing.T) {
 	}
 }
 
+func TestFinishCapturedChatTextRecordsSuccessFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	body := mustMarshalChatResponse(t, "grok-4.20-fast", "hello")
+
+	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+
+	if text != "hello" {
+		t.Fatalf("expected captured text, got %q", text)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-4.20-fast",status="200",surface="responses"} 1`) {
+		t.Fatalf("expected responses 200 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="success"} 1`) {
+		t.Fatalf("expected success feedback metric, got:\n%s", rendered)
+	}
+}
+
+func TestCaptureChatTextRecordsAttemptBeforeAccountSelection(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	spec, ok := model.Resolve("grok-4.20-fast")
+	if !ok {
+		t.Fatal("resolve chat test model")
+	}
+	req := &chatCompletionRequest{
+		Model:    "grok-4.20-fast",
+		Messages: []map[string]any{{"role": "user", "content": "hi"}},
+	}
+	httpReq := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+
+	text := server.captureChatText(httpReq, req, spec, "responses")
+
+	if text != "" {
+		t.Fatalf("expected no captured text without account pool, got %q", text)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_attempts_total{model="grok-4.20-fast",surface="responses"} 1`) {
+		t.Fatalf("expected responses attempt metric, got:\n%s", rendered)
+	}
+}
+
+func TestFinishCapturedChatTextRecordsEmptyOutputFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+	body := mustMarshalChatResponse(t, "grok-4.20-fast", "")
+
+	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+
+	if text != "" {
+		t.Fatalf("expected no captured text, got %q", text)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_empty_outputs_total{model="grok-4.20-fast",surface="responses"} 1`) {
+		t.Fatalf("expected responses empty-output metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-4.20-fast",status="502",surface="responses"} 1`) {
+		t.Fatalf("expected responses 502 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="server_error"} 1`) {
+		t.Fatalf("expected server_error feedback metric, got:\n%s", rendered)
+	}
+}
+
+func TestFinishCapturedChatTextRecordsUpstreamFailureFeedback(t *testing.T) {
+	server := NewServer(nil, nil, nil, nil, nil)
+
+	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, nil, platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
+
+	if text != "" {
+		t.Fatalf("expected no captured text, got %q", text)
+	}
+	rendered := server.metricsRegistry().RenderText(nil)
+	if !strings.Contains(rendered, `grok2api_upstream_responses_total{model="grok-4.20-fast",status="429",surface="responses"} 1`) {
+		t.Fatalf("expected responses 429 metric, got:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `grok2api_account_feedback_total{kind="rate_limited"} 1`) {
+		t.Fatalf("expected rate_limited feedback metric, got:\n%s", rendered)
+	}
+}
+
 func TestRenderGeneratedImagesReturnsUpstreamErrorForB64FetchFailure(t *testing.T) {
 	loadTestConfig(t, "")
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
