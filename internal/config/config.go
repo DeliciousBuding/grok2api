@@ -381,7 +381,7 @@ func toStr(v any) string {
 }
 
 // IsStartupOnlyConfigKey returns true when a dotted key path is reserved for
-// startup-time configuration (storage backends) and cannot be changed at runtime.
+// startup-time configuration and cannot be changed at runtime.
 func IsStartupOnlyConfigKey(dotted string) bool {
 	for _, p := range startupOnlyPrefixes {
 		if strings.HasPrefix(dotted, p) {
@@ -398,4 +398,9 @@ var startupOnlyPrefixes = []string{
 	"account.redis",
 	"account.mysql",
 	"account.postgresql",
+	"server.read_header_timeout_sec",
+	"server.read_timeout_sec",
+	"server.write_timeout_sec",
+	"server.idle_timeout_sec",
+	"server.shutdown_timeout_sec",
 }

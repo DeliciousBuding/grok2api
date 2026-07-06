@@ -166,14 +166,7 @@ func main() {
 	host := envOrDefault("SERVER_HOST", "0.0.0.0")
 	port := envOrDefault("SERVER_PORT", "8000")
 	addr := host + ":" + port
-	httpServer := &http.Server{
-		Addr:              addr,
-		Handler:           handler,
-		ReadHeaderTimeout: 30 * time.Second,
-		ReadTimeout:       0,
-		WriteTimeout:      0,
-		IdleTimeout:       120 * time.Second,
-	}
+	httpServer := newHTTPServerFromConfig(addr, handler, cfg)
 
 	// Listen on a separate goroutine so the main goroutine can wait for shutdown.
 	serverErrCh := make(chan error, 1)
@@ -198,7 +191,7 @@ func main() {
 
 	// 13. Graceful shutdown: cancel context (stops goroutines), then shutdown HTTP.
 	cancel()
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), serverShutdownTimeout(cfg))
 	defer shutdownCancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		logger.Warnf("http server shutdown timed out: error=%v", err)
@@ -213,6 +206,40 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Infof("application shutdown completed")
+}
+
+const (
+	defaultReadHeaderTimeout = 30 * time.Second
+	defaultReadTimeout       = 0
+	defaultWriteTimeout      = 0
+	defaultIdleTimeout       = 120 * time.Second
+	defaultShutdownTimeout   = 15 * time.Second
+)
+
+func newHTTPServerFromConfig(addr string, handler http.Handler, cfg *config.Snapshot) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: configDurationSec(cfg, "server.read_header_timeout_sec", defaultReadHeaderTimeout),
+		ReadTimeout:       configDurationSec(cfg, "server.read_timeout_sec", defaultReadTimeout),
+		WriteTimeout:      configDurationSec(cfg, "server.write_timeout_sec", defaultWriteTimeout),
+		IdleTimeout:       configDurationSec(cfg, "server.idle_timeout_sec", defaultIdleTimeout),
+	}
+}
+
+func serverShutdownTimeout(cfg *config.Snapshot) time.Duration {
+	return configDurationSec(cfg, "server.shutdown_timeout_sec", defaultShutdownTimeout)
+}
+
+func configDurationSec(cfg *config.Snapshot, key string, def time.Duration) time.Duration {
+	if cfg == nil {
+		return def
+	}
+	n := cfg.GetInt(key, int(def/time.Second))
+	if n < 0 {
+		return def
+	}
+	return time.Duration(n) * time.Second
 }
 
 // runDirectorySyncLoop mirrors the Python _sync_loop: aggressively poll after

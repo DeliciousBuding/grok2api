@@ -14,6 +14,11 @@ func TestAccountStorageKeysAreStartupOnly(t *testing.T) {
 		"account.sqlite.path",
 		"account.postgresql.dsn",
 		"account.redis.addr",
+		"server.read_header_timeout_sec",
+		"server.read_timeout_sec",
+		"server.write_timeout_sec",
+		"server.idle_timeout_sec",
+		"server.shutdown_timeout_sec",
 	} {
 		if !IsStartupOnlyConfigKey(key) {
 			t.Fatalf("expected %s to be startup-only", key)
