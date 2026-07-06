@@ -118,6 +118,8 @@ admin_sec = 60
 upload_timeout = 60
 list_timeout = 60
 delete_timeout = 60
+# 远程资源下载最大字节数，<=0 使用安全默认值 30MiB
+max_download_bytes = 31457280
 
 [nsfw]
 timeout = 60
