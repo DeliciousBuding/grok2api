@@ -73,6 +73,28 @@ max_header_bytes = -1
 	}
 }
 
+func TestDirectorySyncIntervalsFallBackForNonPositiveValues(t *testing.T) {
+	idle, active := directorySyncIntervals(0, -5)
+
+	if idle != defaultDirectorySyncIdleInterval {
+		t.Fatalf("expected default idle sync interval, got %d", idle)
+	}
+	if active != defaultDirectorySyncActiveInterval {
+		t.Fatalf("expected default active sync interval, got %d", active)
+	}
+}
+
+func TestDirectorySyncIntervalsKeepPositiveValues(t *testing.T) {
+	idle, active := directorySyncIntervals(45, 7)
+
+	if idle != 45 {
+		t.Fatalf("expected idle sync interval 45, got %d", idle)
+	}
+	if active != 7 {
+		t.Fatalf("expected active sync interval 7, got %d", active)
+	}
+}
+
 func loadMainTestConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()

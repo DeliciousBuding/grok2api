@@ -124,9 +124,11 @@ func main() {
 	var wg sync.WaitGroup
 
 	// 10a. Account directory sync loop — all processes, lightweight incremental pull.
-	syncIdleInterval := envInt("ACCOUNT_SYNC_INTERVAL", 30)
-	syncActiveInterval := envInt("ACCOUNT_SYNC_ACTIVE_INTERVAL", 3)
-	syncIdleAfter := 5
+	syncIdleInterval, syncActiveInterval := directorySyncIntervals(
+		envInt("ACCOUNT_SYNC_INTERVAL", defaultDirectorySyncIdleInterval),
+		envInt("ACCOUNT_SYNC_ACTIVE_INTERVAL", defaultDirectorySyncActiveInterval),
+	)
+	syncIdleAfter := defaultDirectorySyncIdleAfter
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -215,6 +217,10 @@ const (
 	defaultIdleTimeout       = 120 * time.Second
 	defaultShutdownTimeout   = 15 * time.Second
 	defaultMaxHeaderBytes    = http.DefaultMaxHeaderBytes
+
+	defaultDirectorySyncIdleInterval   = 30
+	defaultDirectorySyncActiveInterval = 3
+	defaultDirectorySyncIdleAfter      = 5
 )
 
 func newHTTPServerFromConfig(addr string, handler http.Handler, cfg *config.Snapshot) *http.Server {
@@ -258,6 +264,7 @@ func configPositiveInt(cfg *config.Snapshot, key string, def int) int {
 // runDirectorySyncLoop mirrors the Python _sync_loop: aggressively poll after
 // changes detected, back off to idle pace after idleAfter consecutive empty polls.
 func runDirectorySyncLoop(ctx context.Context, dir *account.Directory, idleInterval, activeInterval, idleAfter int) {
+	idleInterval, activeInterval = directorySyncIntervals(idleInterval, activeInterval)
 	idleStreak := 0
 	for {
 		interval := activeInterval
@@ -284,6 +291,16 @@ func runDirectorySyncLoop(ctx context.Context, dir *account.Directory, idleInter
 			}
 		}
 	}
+}
+
+func directorySyncIntervals(idleInterval, activeInterval int) (int, int) {
+	if idleInterval <= 0 {
+		idleInterval = defaultDirectorySyncIdleInterval
+	}
+	if activeInterval <= 0 {
+		activeInterval = defaultDirectorySyncActiveInterval
+	}
+	return idleInterval, activeInterval
 }
 
 // runRefreshLoop calls refreshSvc.RefreshScheduled for the pool at the configured interval.
