@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // modeNames maps modeID → the request modelName for /rest/rate-limits.

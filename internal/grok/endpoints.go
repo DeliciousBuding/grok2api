@@ -16,10 +16,10 @@ const (
 	Chat = Base + "/rest/app-chat/conversations/new"
 
 	// Asset management.
-	AssetsUpload   = Base + "/rest/app-chat/upload-file"
-	AssetsListURL  = Base + "/rest/assets"
+	AssetsUpload    = Base + "/rest/app-chat/upload-file"
+	AssetsListURL   = Base + "/rest/assets"
 	AssetsDeleteURL = Base + "/rest/assets-metadata" // append /{asset_id}
-	AssetsDownload = AssetsCDN                       // GET /{path}
+	AssetsDownload  = AssetsCDN                      // GET /{path}
 
 	// Rate limits (usage / quota sync).
 	RateLimits = Base + "/rest/rate-limits"
@@ -32,13 +32,13 @@ const (
 	SetBirthURL = Base + "/rest/auth/set-birth-date"
 
 	// Media (video).
-	MediaPost      = Base + "/rest/media/post/create"
-	MediaPostLink  = Base + "/rest/media/post/create-link"
-	VideoUpscale   = Base + "/rest/media/video/upscale"
+	MediaPost     = Base + "/rest/media/post/create"
+	MediaPostLink = Base + "/rest/media/post/create-link"
+	VideoUpscale  = Base + "/rest/media/video/upscale"
 
 	// Console API (console.x.ai).
 	ConsoleResponses = ConsoleBase + "/v1/responses"
-	ConsoleChat       = ConsoleBase + "/v1/chat/completions"
+	ConsoleChat      = ConsoleBase + "/v1/chat/completions"
 )
 
 // DefaultUserAgent is the Chrome UA used when no cf_clearance profile is set.

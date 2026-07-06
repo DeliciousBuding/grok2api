@@ -8,9 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // handleMessages serves the Anthropic-compatible /v1/messages endpoint.
@@ -36,6 +36,11 @@ func (s *Server) handleMessages(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+req.Model+"' not found", "model", "model_not_found"))
 		return
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, req.Model)
+	if !ok {
+		return
+	}
+	defer releaseAdmission()
 
 	stream := config.Global().GetBool("features.stream", true)
 	if req.Stream != nil {

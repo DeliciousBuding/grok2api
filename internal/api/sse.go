@@ -1,9 +1,18 @@
 package api
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"sync"
+	"time"
+
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // sseWriter writes Server-Sent Events frames to an HTTP response.
@@ -85,4 +94,110 @@ func (s *sseWriter) writeAnthropicError(message string, kind string, code string
 	s.writeEvent("error", "")
 	s.writeJSONData(errObj)
 	s.writeDone()
+}
+
+func (s *sseWriter) writeOpenAIAppError(err error) {
+	var appErr *platform.AppError
+	if errors.As(err, &appErr) {
+		s.writeOpenAIError(appErr.Message, string(appErr.Kind), appErr.Code, appErr.Param)
+		return
+	}
+	s.writeOpenAIError(err.Error(), string(platform.ErrServer), "stream_error", "")
+}
+
+type idleLineScanner struct {
+	scanner *bufio.Scanner
+	closer  io.Closer
+	idle    time.Duration
+	results chan lineScanResult
+	doneCh  chan struct{}
+	once    sync.Once
+	done    bool
+}
+
+type lineScanResult struct {
+	line string
+	ok   bool
+	err  error
+}
+
+func newIdleLineScanner(scanner *bufio.Scanner, closer io.Closer, idle time.Duration) *idleLineScanner {
+	r := &idleLineScanner{scanner: scanner, closer: closer, idle: idle, doneCh: make(chan struct{})}
+	if idle > 0 {
+		r.results = make(chan lineScanResult, 1)
+		go r.scan()
+	}
+	return r
+}
+
+func (r *idleLineScanner) scan() {
+	for r.scanner.Scan() {
+		if !r.send(lineScanResult{line: r.scanner.Text(), ok: true}) {
+			return
+		}
+	}
+	_ = r.send(lineScanResult{err: r.scanner.Err()})
+}
+
+func (r *idleLineScanner) send(res lineScanResult) bool {
+	select {
+	case r.results <- res:
+		return true
+	case <-r.doneCh:
+		return false
+	}
+}
+
+func (r *idleLineScanner) Next(ctx context.Context) (string, bool, error) {
+	if r.done {
+		return "", false, nil
+	}
+	if r.idle <= 0 {
+		if r.scanner.Scan() {
+			return r.scanner.Text(), true, nil
+		}
+		r.done = true
+		return "", false, r.scanner.Err()
+	}
+	timer := time.NewTimer(r.idle)
+	defer timer.Stop()
+	select {
+	case res := <-r.results:
+		if !res.ok {
+			r.done = true
+		}
+		return res.line, res.ok, res.err
+	case <-ctx.Done():
+		r.Close()
+		r.done = true
+		return "", false, ctx.Err()
+	case <-timer.C:
+		r.Close()
+		r.done = true
+		return "", false, platform.StreamIdleTimeout(durationSecondsCeil(r.idle))
+	}
+}
+
+func (r *idleLineScanner) Close() {
+	r.once.Do(func() {
+		close(r.doneCh)
+		if r.closer != nil {
+			_ = r.closer.Close()
+		}
+	})
+}
+
+func streamIdleTimeoutDuration() time.Duration {
+	n := config.Global().GetInt("timeout.stream_idle_sec", 60)
+	if n <= 0 {
+		return 0
+	}
+	return time.Duration(n) * time.Second
+}
+
+func durationSecondsCeil(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	return int((d + time.Second - 1) / time.Second)
 }

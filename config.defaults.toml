@@ -10,6 +10,18 @@ api_key = ""
 file_level = "INFO"
 max_files = 7
 
+# ==================== HTTP 服务资源边界 ====================
+[server]
+# 请求体最大字节数，0 = 不限制。生产建议按入口网关限制同步设置。
+max_body_bytes = 0
+
+# ==================== Admission Control ====================
+[admission]
+# 全局写请求并发上限，0 = 不限制
+global_max_inflight = 0
+# 单模型并发上限，0 = 不限制
+per_model_max_inflight = 0
+
 # ==================== 应用功能 ====================
 [features]
 # 是否启用临时对话
@@ -66,7 +78,22 @@ heavy_interval_sec = 7200
 # 单号并发上限
 max_inflight = 8
 
-# ==================== 超时配置 ====================
+# ==================== 上游/管理超时配置 ====================
+[timeout]
+# 聊天上游超时（秒）
+chat_sec = 300
+# Console 上游超时（秒）
+console_sec = 300
+# 图像上游超时（秒）
+image_sec = 300
+# 视频上游超时（秒）
+video_sec = 600
+# 流式响应上游单次静默超时（秒），0 = 禁用
+stream_idle_sec = 60
+# 管理操作超时（秒）
+admin_sec = 60
+
+# ==================== 资源/NSFW 超时配置 ====================
 [asset]
 upload_timeout = 60
 list_timeout = 60

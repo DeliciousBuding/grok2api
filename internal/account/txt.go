@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // TxtRepository stores accounts in a local JSONL file (one JSON object per line).

@@ -13,11 +13,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // chatCompletionRequest is the OpenAI-compatible chat request body.
@@ -61,6 +61,11 @@ func (s *Server) handleChatCompletions(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+req.Model+"' not found", "model", "model_not_found"))
 		return
 	}
+	releaseAdmission, ok := s.acquireModelAdmission(c, req.Model)
+	if !ok {
+		return
+	}
+	defer releaseAdmission()
 	stream := config.Global().GetBool("features.stream", true)
 	if req.Stream != nil {
 		stream = *req.Stream
@@ -125,18 +130,25 @@ func (s *Server) runGrokChatWithRetry(c *gin.Context, req *chatCompletionRequest
 			return
 		}
 		exclude = append(exclude, lease.Token)
+		s.metricsRegistry().IncAttempt("chat", req.Model)
 		err := s.runGrokChatOnce(c.Writer, c.Request, lease, spec, message, fileInputs, temp, topP, emitThink, stream, req.Model)
-		s.Directory.Release(lease)
+		if s.Directory != nil {
+			s.Directory.Release(lease)
+		}
 		if err == nil {
+			s.metricsRegistry().IncUpstreamStatus("chat", req.Model, http.StatusOK)
 			s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 			return
 		}
+		status := metricStatusCode(err)
+		s.metricsRegistry().IncUpstreamStatus("chat", req.Model, status)
 		s.feedbackError(lease.Token, err, lease.ModeID)
 		lastErr = err
-		if !shouldRetryUpstream(err) || attempt == maxRetries {
+		if !shouldRetryAttempt(err, attempt, maxRetries) {
 			writeAppError(c, err)
 			return
 		}
+		s.metricsRegistry().IncRetry("chat", req.Model, metricReason(status))
 	}
 	if lastErr != nil {
 		writeAppError(c, lastErr)
@@ -151,10 +163,20 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 		return platform.UpstreamError("encode chat payload: "+err.Error(), 500, "")
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
+	timeoutClass := "chat"
+	defaultTimeoutSec := 300
+	if spec.IsImage() || spec.IsImageEdit() {
+		timeoutClass = "image"
+	}
+	if spec.IsVideo() {
+		timeoutClass = "video"
+		defaultTimeoutSec = 600
+	}
+	timeout := timeoutClassDuration(timeoutClass, defaultTimeoutSec)
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
-	bodyReader, err := s.Transport.PostStream(ctx, grok.Chat, lease.Token, body)
+	bodyReader, err := s.Transport.PostStream(ctx, grok.Chat, lease.Token, body, grok.WithTimeout(timeout))
 	if err != nil {
 		return err
 	}
@@ -170,8 +192,17 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 		first := true
 		scanner := bufio.NewScanner(bodyReader)
 		scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-		for scanner.Scan() {
-			line := scanner.Text()
+		lines := newIdleLineScanner(scanner, bodyReader, streamIdleTimeoutDuration())
+		defer lines.Close()
+		for {
+			line, ok, err := lines.Next(ctx)
+			if err != nil {
+				sw.writeOpenAIAppError(err)
+				return nil
+			}
+			if !ok {
+				break
+			}
 			kind, data := grok.ClassifyLine(line)
 			if kind == "done" {
 				break
@@ -263,6 +294,9 @@ func (s *Server) runGrokChatOnce(w http.ResponseWriter, r *http.Request, lease *
 			text += "\n\n"
 		}
 		text += strings.Join(mds, "\n\n")
+	}
+	if text == "" && len(imageURLs) == 0 {
+		s.metricsRegistry().IncEmptyOutput("chat", modelName)
 	}
 	resp := makeChatResponse(completionID, created, modelName, text, thinking, emitThink)
 	b, _ := json.Marshal(resp)
@@ -396,6 +430,7 @@ func extractMessages(messages []map[string]any) (string, []string, *platform.App
 // feedback posts request outcome to the directory (success path)
 // and triggers an async quota sync for the used mode.
 func (s *Server) feedback(token string, kind account.FeedbackKind, modeID int, remaining *int, resetAtMs *int64) {
+	s.metricsRegistry().IncFeedback(string(kind))
 	if s.Directory == nil {
 		return
 	}
@@ -413,9 +448,6 @@ func (s *Server) feedback(token string, kind account.FeedbackKind, modeID int, r
 
 // feedbackError posts an error outcome to the directory.
 func (s *Server) feedbackError(token string, err error, modeID int) {
-	if s.Directory == nil {
-		return
-	}
 	var appErr *platform.AppError
 	if !asAppError(err, &appErr) {
 		appErr = platform.NewAppError(err.Error(), platform.ErrServer, "internal_error", 500)
@@ -425,6 +457,10 @@ func (s *Server) feedbackError(token string, err error, modeID int) {
 	// even for 403 (blocked-user) or 400 (session not found).
 	if kind != account.FbUnauthorized && platform.IsInvalidCredentialsBody(appErr.Body) {
 		kind = account.FbUnauthorized
+	}
+	s.metricsRegistry().IncFeedback(string(kind))
+	if s.Directory == nil {
+		return
 	}
 	s.Directory.Feedback(token, kind, modeID, nil, nil)
 	// Also persist to the repository if unauthorized + expired.
@@ -486,13 +522,16 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		writeAppError(c, platform.RateLimitError("No available accounts"))
 		return
 	}
-	defer s.Directory.Release(lease)
+	if s.Directory != nil {
+		defer s.Directory.Release(lease)
+	}
 
 	completionID := "chatcmpl-" + uuid.NewString()
 	created := time.Now().Unix()
 	modelName := req.Model
 
 	streamGen := grok.NewImagineStream(lease.Token)
+	s.metricsRegistry().IncAttempt("image_ws", req.Model)
 	events := streamGen.StreamImages(prompt, aspectRatio, n, enableNSFW, enablePro)
 
 	if stream {
@@ -527,6 +566,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 				chunk := makeStreamChunk(completionID, created, modelName, md, "", false)
 				sw.writeJSONData(chunk)
 			case grok.ImagineEventError:
+				s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
 				sw.writeOpenAIError(ev.Error, "upstream_error", "", "")
 				return
 			}
@@ -535,6 +575,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 		finalChunk := makeStreamChunk(completionID, created, modelName, "", "", true)
 		sw.writeJSONData(finalChunk)
 		sw.writeDone()
+		s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusOK)
 		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 		return
 	}
@@ -565,6 +606,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 				imageURLs = append(imageURLs, url)
 			}
 		case grok.ImagineEventError:
+			s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusBadGateway)
 			writeAppError(c, platform.UpstreamError(ev.Error, 502, ""))
 			s.feedbackError(lease.Token, platform.UpstreamError(ev.Error, 502, ""), lease.ModeID)
 			return
@@ -588,6 +630,7 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 	c.Writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.Writer.WriteHeader(http.StatusOK)
 	_, _ = c.Writer.Write(b)
+	s.metricsRegistry().IncUpstreamStatus("image_ws", req.Model, http.StatusOK)
 	s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 }
 

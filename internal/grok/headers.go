@@ -15,9 +15,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/grok/statsig"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/grok/statsig"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // resolveProxyProfile returns the effective user-agent and cf_clearance.

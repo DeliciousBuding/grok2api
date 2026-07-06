@@ -114,6 +114,21 @@ When `reasoning_effort` is enabled, thinking tokens appear as:
 
 On upstream failure (429, 401, 503), the gateway automatically retries with a different account. Max retries: `retry.max_retries` (default 1) for quota strategy, 5 for random strategy.
 
+#### Admission Control
+
+When `admission.global_max_inflight` or `admission.per_model_max_inflight` is exhausted, the gateway rejects the request with HTTP 429 before selecting an upstream account.
+
+```json
+{
+  "error": {
+    "message": "Admission control exhausted",
+    "type": "rate_limit_error",
+    "code": "admission_control_exhausted",
+    "scope": "model:grok-4.20-fast"
+  }
+}
+```
+
 ---
 
 ## Responses API (OpenAI-compatible)
@@ -396,11 +411,55 @@ Get a single model by ID.
 {"status": "ok"}
 ```
 
+### `GET /ready`
+
+Readiness endpoint for load balancers and orchestrators. It returns process, account-pool, and observed-upstream states without exposing tokens.
+
+When no active accounts are loaded, it returns HTTP 503:
+
+```json
+{
+  "status": "not_ready",
+  "checks": {
+    "process": {"status": "ok"},
+    "account_pool": {"status": "not_ready", "total": 0, "active": 0, "inflight": 0},
+    "upstream": {"status": "unknown"}
+  }
+}
+```
+
+With at least one active account, it returns HTTP 200 and `status: "ready"` unless observed upstream error counters outweigh successful observations.
+
 ### `GET /meta`
 
 ```json
 {"version": "1.0.0"}
 ```
+
+### `GET /metrics`
+
+Prometheus text-format metrics. The endpoint exposes aggregate process, account-pool, admission, and operational counters only; it must not include raw SSO tokens or API keys.
+
+Current baseline metrics:
+
+```text
+grok2api_build_info{version="1.0.0"} 1
+grok2api_accounts_total 0
+grok2api_accounts_active 0
+grok2api_account_inflight 0
+grok2api_admission_inflight 0
+grok2api_attempts_total{model="grok-4.20-fast",surface="chat"} 1
+grok2api_retries_total{model="grok-4.20-fast",reason="429",surface="chat"} 1
+grok2api_upstream_responses_total{model="grok-4.20-fast",status="429",surface="chat"} 1
+grok2api_account_feedback_total{kind="rate_limited"} 1
+grok2api_empty_outputs_total{model="grok-4.20-fast",surface="responses"} 1
+grok2api_http_request_duration_seconds_bucket{le="0.5",method="POST",path="/v1/chat/completions",status="200"} 1
+grok2api_http_request_duration_seconds_bucket{le="+Inf",method="POST",path="/v1/chat/completions",status="200"} 1
+grok2api_http_request_duration_seconds_sum{method="POST",path="/v1/chat/completions",status="200"} 0.42
+grok2api_http_request_duration_seconds_count{method="POST",path="/v1/chat/completions",status="200"} 1
+```
+
+Request-duration histogram labels use the HTTP method, Gin route pattern, and status code to avoid token or path-parameter leakage.
 
 ### `GET /v1/files/image?id=<file_id>`
 
@@ -415,6 +474,8 @@ Serve a cached video by file ID. Returns MP4.
 ## Admin API
 
 All admin endpoints require `app.app_key` authentication via `Authorization: Bearer <app_key>` or `?app_key=<key>`.
+
+Mutating admin endpoints emit an `admin_audit` log event after each request. Events include the operation name, outcome, HTTP method/path/status, counts, pool or media type where relevant, and short non-reversible SHA-256 token identifiers. They do not include raw SSO tokens, cookies, Authorization headers, request bodies, local file paths, cache file names, tags, or raw asset IDs.
 
 ### Config
 
@@ -436,6 +497,37 @@ All admin endpoints require `app.app_key` authentication via `Authorization: Bea
 | `POST` | `/admin/api/tokens/disabled` | Toggle disabled state |
 | `POST` | `/admin/api/tokens/disabled/batch` | Batch toggle disabled |
 
+#### `GET /admin/api/tokens`
+
+Lists account records with bounded pagination.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `page` | `1` | — | Positive page number |
+| `page_size` | `50` | `1000` | Positive page size; larger values return `invalid_page_size` |
+| `pool` | — | — | Optional `basic`, `super`, or `heavy` filter |
+| `status` | — | — | Optional `active`, `cooling`, `expired`, or `disabled` filter |
+
+Response shape:
+
+```json
+{
+  "tokens": [],
+  "pagination": {
+    "page": 1,
+    "page_size": 50,
+    "total": 0,
+    "total_pages": 1,
+    "has_more": false,
+    "revision": 1
+  }
+}
+```
+
+#### `POST /admin/api/tokens`
+
+Replaces all tokens in one or more pools. Pool names must be valid and each pool value must be an array; invalid pools or malformed pool payloads return HTTP 400 instead of being silently ignored.
+
 ### Pool & Batch Operations
 
 | Method | Path | Description |
@@ -444,6 +536,15 @@ All admin endpoints require `app.app_key` authentication via `Authorization: Bea
 | `POST` | `/admin/api/batch/nsfw` | Batch NSFW toggle |
 | `POST` | `/admin/api/batch/refresh` | Trigger quota refresh |
 | `POST` | `/admin/api/batch/cache-clear` | Clear all caches |
+
+Batch endpoints accept a bounded `concurrency` query parameter. Invalid, zero, or oversized values return HTTP 400 with `invalid_concurrency`.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `concurrency` | `50` | `80` | Positive worker concurrency for batch operations |
+| `enabled` | `true` | — | `POST /admin/api/batch/nsfw` only; accepts `true`, `false`, `1`, or `0` |
+
+`POST /admin/api/batch/cache-clear` requires at least one valid token before it checks the refresh service. Empty token lists return HTTP 400 instead of a server-side availability error.
 
 ### Status & Sync
 
@@ -462,6 +563,32 @@ All admin endpoints require `app.app_key` authentication via `Authorization: Bea
 | `POST` | `/admin/api/assets/delete-item` | Delete a specific asset |
 | `POST` | `/admin/api/assets/clear-token` | Clear all assets for a token |
 
+#### `GET /admin/api/assets`
+
+Lists upstream assets per account using bounded account pagination and bounded upstream-list concurrency.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `page` | `1` | — | Positive account page number |
+| `page_size` | `50` | `1000` | Positive account page size; larger values return `invalid_page_size` |
+| `pool` | — | — | Optional `basic`, `super`, or `heavy` account filter |
+| `status` | — | — | Optional `active`, `cooling`, `expired`, or `disabled` account filter |
+| `concurrency` | `20` | `80` | Positive upstream asset-list worker concurrency |
+
+The response includes `pagination` metadata for the account page used to select tokens.
+
+#### Asset Deletion
+
+`POST /admin/api/assets/delete-item` requires `token` and `asset_id` (or `assetId`). Missing fields return `missing_token` or `missing_asset_id`.
+
+`POST /admin/api/assets/clear-token` deletes all upstream assets for one token and therefore requires an explicit confirmation body:
+
+```json
+{"token": "<sso-token>", "confirm": true}
+```
+
+Omitting `confirm: true` returns HTTP 400 with `confirmation_required`.
+
 ### Media Cache
 
 | Method | Path | Description |
@@ -471,6 +598,22 @@ All admin endpoints require `app.app_key` authentication via `Authorization: Bea
 | `POST` | `/admin/api/cache/clear` | Clear all cache |
 | `POST` | `/admin/api/cache/item/delete` | Delete a cache item |
 | `POST` | `/admin/api/cache/items/delete` | Delete multiple items |
+
+Cache-management endpoints accept only `image` or `video` for `type` / `cache_type`; invalid values return HTTP 400 with `invalid_cache_type`.
+
+#### `GET /admin/api/cache/list`
+
+Lists cached media files with bounded pagination.
+
+| Query | Default | Limit | Description |
+|---|---:|---:|---|
+| `type` / `cache_type` | `image` | — | `image` or `video` |
+| `page` | `1` | — | Positive page number |
+| `page_size` | `1000` | `1000` | Positive page size; larger values return `invalid_page_size` |
+
+The response includes `pagination` metadata with `page`, `page_size`, `total`, `total_pages`, and `has_more`.
+
+`POST /admin/api/cache/clear` may omit the JSON body to clear image cache by default, but malformed JSON returns HTTP 400 instead of being ignored.
 
 ---
 
@@ -611,18 +754,17 @@ All errors follow this format:
 {
   "error": {
     "message": "Description of what went wrong",
-    "type": "validation_error",
+    "type": "invalid_request_error",
     "code": "model_not_found",
-    "param": "model",
-    "status": 400
+    "param": "model"
   }
 }
 ```
 
 | Error Type | HTTP Status | Common Causes |
 |---|---|---|
-| `validation_error` | 400 | Invalid model, missing required fields, bad JSON |
+| `invalid_request_error` | 400 | Invalid model, missing required fields, bad JSON |
 | `authentication_error` | 401 | Missing or invalid API key |
-| `rate_limit_error` | 429 | No available accounts, all quotas exhausted |
+| `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |
 | `upstream_error` | 502 | Grok upstream returned an error |
 | `server_error` | 500 | Internal server error |

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // Slot is the in-memory runtime view of an account used for fast selection.
@@ -65,7 +65,7 @@ func NewDirectory(repo Repository) *Directory {
 		byMode:      map[modeKey]map[string]struct{}{},
 		repo:        repo,
 		strategy:    StrategyQuota,
-		maxInflight: 8,
+		maxInflight: quotaMaxInflight,
 	}
 }
 
@@ -83,8 +83,11 @@ func (d *Directory) Strategy() Strategy {
 	return d.strategy
 }
 
-// SetMaxInflight sets the per-account inflight cap (random strategy).
+// SetMaxInflight sets the per-account inflight cap across selection strategies.
 func (d *Directory) SetMaxInflight(n int) {
+	if n <= 0 {
+		n = quotaMaxInflight
+	}
 	d.mu.Lock()
 	d.maxInflight = n
 	d.mu.Unlock()
@@ -262,7 +265,7 @@ func (d *Directory) quotaSelectLocked(poolID int, modeID int, exclude map[string
 			w.ResetAt = &reset
 			s.Quota.Set(modeID, *w)
 		}
-		if w.Remaining <= 0 || s.Inflight >= quotaMaxInflight {
+		if w.Remaining <= 0 || s.Inflight >= d.maxInflight {
 			continue
 		}
 		score := quotaScore(s, w.Remaining, nowSec)

@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/logger"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/logger"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // errInvalidCredentials is a sentinel returned by refreshOne when the upstream

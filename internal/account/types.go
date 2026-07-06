@@ -6,7 +6,7 @@ package account
 import (
 	"sort"
 
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // Status is the persistent lifecycle status of an account.

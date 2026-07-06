@@ -3,11 +3,12 @@ package api
 import (
 	"context"
 	"strings"
+	"time"
 
-	"github.com/aurora-develop/grok2api/internal/account"
-	"github.com/aurora-develop/grok2api/internal/config"
-	"github.com/aurora-develop/grok2api/internal/model"
-	"github.com/aurora-develop/grok2api/internal/platform"
+	"github.com/DeliciousBuding/grok2api/internal/account"
+	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/model"
+	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
 // selectionMaxRetries mirrors _account_selection.selection_max_retries().
@@ -16,7 +17,14 @@ func selectionMaxRetries() int {
 	if strategy == "random" {
 		return 5
 	}
-	return config.Global().GetInt("retry.max_retries", 1)
+	n := config.Global().GetInt("retry.max_retries", 1)
+	if n < 0 {
+		return 0
+	}
+	if n > 5 {
+		return 5
+	}
+	return n
 }
 
 // modeCandidates returns the candidate mode ids for a spec.
@@ -32,6 +40,9 @@ func modeCandidates(spec *model.Spec) []int {
 // reserveAccount picks an account for the spec, iterating candidate modes.
 // Returns the lease and the actually selected mode id, or nil if none.
 func reserveAccount(ctx context.Context, dir *account.Directory, spec *model.Spec, exclude []string) (*account.Lease, int) {
+	if dir == nil || spec == nil {
+		return nil, 0
+	}
 	for _, modeID := range modeCandidates(spec) {
 		lease, _ := dir.Reserve(spec.PoolCandidates(), modeID, exclude, nil)
 		if lease != nil {
@@ -66,6 +77,18 @@ func shouldRetryUpstream(err error) bool {
 		return true
 	}
 	return false
+}
+
+func shouldRetryAttempt(err error, attempt, maxRetries int) bool {
+	return shouldRetryUpstream(err) && attempt < maxRetries
+}
+
+func timeoutClassDuration(class string, defaultSec int) time.Duration {
+	n := config.Global().GetInt("timeout."+class+"_sec", defaultSec)
+	if n <= 0 {
+		n = defaultSec
+	}
+	return time.Duration(n) * time.Second
 }
 
 // asAppError is a thin wrapper around errors.As to avoid pulling errors
