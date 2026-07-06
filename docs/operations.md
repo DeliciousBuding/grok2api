@@ -1,4 +1,4 @@
-最后更新：2026-07-06 10:04
+最后更新：2026-07-06 12:30
 
 # Operations Runbook
 
@@ -116,6 +116,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
+
+Use account tags for soft workload routing. Add tags through the admin token APIs, then send `grok2api_prefer_tags` on `/v1/chat/completions` or `/v1/responses` requests. The selector prefers accounts that contain all requested tags, but falls back to the normal candidate set when none are available; use separate API keys, admission limits, or deployments when strict tenant isolation is required.
 
 ## Load Smoke Test
 

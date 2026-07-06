@@ -22,18 +22,19 @@ import (
 
 // chatCompletionRequest is the OpenAI-compatible chat request body.
 type chatCompletionRequest struct {
-	Model             string           `json:"model"`
-	Messages          []map[string]any `json:"messages"`
-	Stream            *bool            `json:"stream,omitempty"`
-	ReasoningEffort   *string          `json:"reasoning_effort,omitempty"`
-	Temperature       *float64         `json:"temperature,omitempty"`
-	TopP              *float64         `json:"top_p,omitempty"`
-	ImageConfig       *imageConfig     `json:"image_config,omitempty"`
-	VideoConfig       *videoConfig     `json:"video_config,omitempty"`
-	Tools             []map[string]any `json:"tools,omitempty"`
-	ToolChoice        any              `json:"tool_choice,omitempty"`
-	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
-	MaxTokens         *int             `json:"max_tokens,omitempty"`
+	Model              string           `json:"model"`
+	Messages           []map[string]any `json:"messages"`
+	Stream             *bool            `json:"stream,omitempty"`
+	ReasoningEffort    *string          `json:"reasoning_effort,omitempty"`
+	Temperature        *float64         `json:"temperature,omitempty"`
+	TopP               *float64         `json:"top_p,omitempty"`
+	ImageConfig        *imageConfig     `json:"image_config,omitempty"`
+	VideoConfig        *videoConfig     `json:"video_config,omitempty"`
+	Tools              []map[string]any `json:"tools,omitempty"`
+	ToolChoice         any              `json:"tool_choice,omitempty"`
+	ParallelToolCalls  *bool            `json:"parallel_tool_calls,omitempty"`
+	MaxTokens          *int             `json:"max_tokens,omitempty"`
+	Grok2APIPreferTags []string         `json:"grok2api_prefer_tags,omitempty"`
 }
 
 type imageConfig struct {
@@ -47,6 +48,13 @@ type videoConfig struct {
 	Size           string `json:"size,omitempty"`
 	ResolutionName string `json:"resolution_name,omitempty"`
 	Preset         string `json:"preset,omitempty"`
+}
+
+func (r *chatCompletionRequest) preferTags() []string {
+	if r == nil || len(r.Grok2APIPreferTags) == 0 {
+		return nil
+	}
+	return account.SortTags(append([]string(nil), r.Grok2APIPreferTags...))
 }
 
 // handleChatCompletions dispatches by capability.
@@ -112,13 +120,14 @@ func (s *Server) runGrokChatWithRetry(c *gin.Context, req *chatCompletionRequest
 
 	maxRetries := selectionMaxRetries()
 	exclude := []string{}
+	preferTags := req.preferTags()
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, exclude)
+		lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, exclude, preferTags)
 		if lease == nil {
 			if s.Refresh != nil {
 				_ = s.Refresh.RefreshOnDemand(c.Request.Context())
-				lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, exclude)
+				lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, exclude, preferTags)
 			}
 		}
 		// Pool exhausted — fall back to the SSO token from Authorization header.
@@ -508,11 +517,12 @@ func (s *Server) runWSImageChat(c *gin.Context, req *chatCompletionRequest, spec
 	ssoToken, _ := apiToken.(string)
 
 	// Reserve an account.
-	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+	preferTags := req.preferTags()
+	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil, preferTags)
 	if lease == nil {
 		if s.Refresh != nil {
 			_ = s.Refresh.RefreshOnDemand(c.Request.Context())
-			lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+			lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, nil, preferTags)
 		}
 	}
 	if lease == nil && ssoToken != "" {

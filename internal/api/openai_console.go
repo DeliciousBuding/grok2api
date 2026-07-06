@@ -39,13 +39,14 @@ func (s *Server) runConsoleChatWithRetry(c *gin.Context, req *chatCompletionRequ
 
 	maxRetries := selectionMaxRetries()
 	exclude := []string{}
+	preferTags := req.preferTags()
 	var lastErr error
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, exclude)
+		lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, exclude, preferTags)
 		if lease == nil {
 			if s.Refresh != nil && attempt == 0 {
 				_ = s.Refresh.RefreshOnDemand(c.Request.Context())
-				lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, exclude)
+				lease, _ = reserveAccount(c.Request.Context(), s.Directory, spec, exclude, preferTags)
 			}
 		}
 		// Pool exhausted — fall back to the SSO token from Authorization header.
@@ -194,15 +195,16 @@ func (s *Server) runConsoleChatOnce(w http.ResponseWriter, r *http.Request, leas
 // handleResponses serves the OpenAI Responses API (/v1/responses).
 func (s *Server) handleResponses(c *gin.Context) {
 	var req struct {
-		Model        string           `json:"model"`
-		Input        any              `json:"input"`
-		Instructions string           `json:"instructions,omitempty"`
-		Stream       *bool            `json:"stream,omitempty"`
-		Reasoning    map[string]any   `json:"reasoning,omitempty"`
-		Temperature  *float64         `json:"temperature,omitempty"`
-		TopP         *float64         `json:"top_p,omitempty"`
-		Tools        []map[string]any `json:"tools,omitempty"`
-		ToolChoice   any              `json:"tool_choice,omitempty"`
+		Model              string           `json:"model"`
+		Input              any              `json:"input"`
+		Instructions       string           `json:"instructions,omitempty"`
+		Stream             *bool            `json:"stream,omitempty"`
+		Reasoning          map[string]any   `json:"reasoning,omitempty"`
+		Temperature        *float64         `json:"temperature,omitempty"`
+		TopP               *float64         `json:"top_p,omitempty"`
+		Tools              []map[string]any `json:"tools,omitempty"`
+		ToolChoice         any              `json:"tool_choice,omitempty"`
+		Grok2APIPreferTags []string         `json:"grok2api_prefer_tags,omitempty"`
 	}
 	if err := readJSON(c, &req); err != nil {
 		writeAppError(c, err)
@@ -226,13 +228,14 @@ func (s *Server) handleResponses(c *gin.Context) {
 
 	messages := responsesInputToMessages(req.Input, req.Instructions)
 	chatReq := &chatCompletionRequest{
-		Model:       req.Model,
-		Messages:    messages,
-		Stream:      &stream,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Tools:       req.Tools,
-		ToolChoice:  req.ToolChoice,
+		Model:              req.Model,
+		Messages:           messages,
+		Stream:             &stream,
+		Temperature:        req.Temperature,
+		TopP:               req.TopP,
+		Tools:              req.Tools,
+		ToolChoice:         req.ToolChoice,
+		Grok2APIPreferTags: req.Grok2APIPreferTags,
 	}
 	if req.Reasoning != nil {
 		if e, ok := req.Reasoning["effort"].(string); ok {
@@ -435,7 +438,7 @@ func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, sp
 	}
 
 	// Select an account and run one attempt.
-	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil)
+	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil, req.preferTags())
 	if lease == nil {
 		return ""
 	}

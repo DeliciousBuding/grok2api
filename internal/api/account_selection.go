@@ -39,12 +39,12 @@ func modeCandidates(spec *model.Spec) []int {
 
 // reserveAccount picks an account for the spec, iterating candidate modes.
 // Returns the lease and the actually selected mode id, or nil if none.
-func reserveAccount(ctx context.Context, dir *account.Directory, spec *model.Spec, exclude []string) (*account.Lease, int) {
+func reserveAccount(ctx context.Context, dir *account.Directory, spec *model.Spec, exclude []string, preferTags []string) (*account.Lease, int) {
 	if dir == nil || spec == nil {
 		return nil, 0
 	}
 	for _, modeID := range modeCandidates(spec) {
-		lease, _ := dir.Reserve(spec.PoolCandidates(), modeID, exclude, nil)
+		lease, _ := dir.Reserve(spec.PoolCandidates(), modeID, exclude, preferTags)
 		if lease != nil {
 			return lease, lease.ModeID
 		}

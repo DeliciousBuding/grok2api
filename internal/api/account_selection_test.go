@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/DeliciousBuding/grok2api/internal/account"
 	"github.com/DeliciousBuding/grok2api/internal/config"
+	"github.com/DeliciousBuding/grok2api/internal/model"
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
@@ -37,6 +40,48 @@ func TestRetryBudgetStopsAtConfiguredLimit(t *testing.T) {
 	}
 }
 
+func TestReserveAccountUsesPreferredTags(t *testing.T) {
+	spec, ok := model.Resolve("grok-4.20-fast")
+	if !ok {
+		t.Fatal("resolve test model")
+	}
+	repo := &snapshotRepo{items: []*account.Record{
+		accountSelectionTestRecord("tok-untagged", nil, 30),
+		accountSelectionTestRecord("tok-tagged", []string{"tenant-a"}, 1),
+	}}
+	dir := account.NewDirectory(repo)
+	if err := dir.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	lease, modeID := reserveAccount(context.Background(), dir, spec, nil, []string{"tenant-a"})
+	if lease == nil {
+		t.Fatal("reserveAccount returned nil")
+	}
+	if lease.Token != "tok-tagged" {
+		t.Fatalf("expected tagged account, got %q", lease.Token)
+	}
+	if modeID != int(model.ModeFast) {
+		t.Fatalf("expected fast mode, got %d", modeID)
+	}
+}
+
+func TestChatCompletionRequestPreferTagsNormalizesInput(t *testing.T) {
+	req := &chatCompletionRequest{Grok2APIPreferTags: []string{"tenant-b", "", "tenant-a", "tenant-a"}}
+
+	got := req.preferTags()
+
+	want := []string{"tenant-a", "tenant-b"}
+	if len(got) != len(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected %v, got %v", want, got)
+		}
+	}
+}
+
 func TestTimeoutClassDurationReadsConfigAndRejectsInvalid(t *testing.T) {
 	loadTestConfig(t, "[timeout]\nchat_sec = 7\nconsole_sec = -1\n")
 
@@ -63,4 +108,17 @@ func loadTestConfig(t *testing.T, body string) {
 	if err := config.Load(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func accountSelectionTestRecord(token string, tags []string, remaining int) *account.Record {
+	rec := account.NewRecord(token)
+	rec.Tags = tags
+	quota := account.QuotaSet{}
+	quota.Set(int(model.ModeFast), account.QuotaWindow{
+		Total:         remaining,
+		Remaining:     remaining,
+		WindowSeconds: account.BasicFastWindowSec,
+	})
+	rec.Quota = quota.ToMap()
+	return rec
 }

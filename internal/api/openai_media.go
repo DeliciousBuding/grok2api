@@ -167,7 +167,7 @@ func (s *Server) handleWSImageGenerations(c *gin.Context, spec *model.Spec, prom
 	ssoToken, _ := apiToken.(string)
 
 	// Reserve an account.
-	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil)
+	lease, _ := reserveAccount(c.Request.Context(), s.Directory, spec, nil, nil)
 	if lease == nil && ssoToken != "" {
 		lease = &account.Lease{Token: ssoToken, ModeID: int(spec.ModeId)}
 	}
@@ -306,7 +306,7 @@ func (s *Server) handleImageEdits(c *gin.Context) {
 func (s *Server) captureImageURLs(r *http.Request, req *chatCompletionRequest, spec *model.Spec) []string {
 	cw := &captureWriter{}
 
-	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil)
+	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil, req.preferTags())
 	if lease == nil {
 		return nil
 	}
@@ -535,7 +535,7 @@ func (s *Server) runVideoJob(job *videoJob, prompt, modelName string, spec *mode
 	preset := "normal"
 	promptWithFlag := prompt + " --mode=normal"
 
-	lease, _ := reserveAccount(ctx, s.Directory, spec, nil)
+	lease, _ := reserveAccount(ctx, s.Directory, spec, nil, nil)
 	if lease == nil {
 		now := time.Now().Unix()
 		job.Status = "failed"
