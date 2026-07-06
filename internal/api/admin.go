@@ -1150,35 +1150,13 @@ func (s *Server) handleAssetsList(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	results := []map[string]any{}
-	totalAssets := 0
-	mu := sync.Mutex{}
-	wg := sync.WaitGroup{}
-	sem := make(chan struct{}, conc)
+	tokens := make([]string, 0, len(page.Items))
 	for _, rec := range page.Items {
-		wg.Add(1)
-		go func(t string) {
-			defer wg.Done()
-			select {
-			case sem <- struct{}{}:
-				defer func() { <-sem }()
-			case <-ctx.Done():
-				mu.Lock()
-				results = append(results, extractAssetRows(t, nil, ctx.Err()))
-				mu.Unlock()
-				return
-			}
-			resp, err := grok.ListAssets(ctx, s.Transport, t)
-			row := extractAssetRows(t, resp, err)
-			mu.Lock()
-			defer mu.Unlock()
-			results = append(results, row)
-			if count, _ := row["count"].(int); count > 0 {
-				totalAssets += count
-			}
-		}(rec.Token)
+		tokens = append(tokens, rec.Token)
 	}
-	wg.Wait()
+	results, totalAssets := collectAssetRows(ctx, tokens, conc, func(ctx context.Context, token string) (map[string]any, error) {
+		return grok.ListAssets(ctx, s.Transport, token)
+	})
 	c.JSON(http.StatusOK, gin.H{
 		"tokens":       results,
 		"total_assets": totalAssets,
@@ -1191,6 +1169,53 @@ func (s *Server) handleAssetsList(c *gin.Context) {
 			"revision":    page.Revision,
 		},
 	})
+}
+
+type assetListFunc func(context.Context, string) (map[string]any, error)
+
+func collectAssetRows(ctx context.Context, tokens []string, concurrency int, list assetListFunc) ([]map[string]any, int) {
+	if len(tokens) == 0 {
+		return []map[string]any{}, 0
+	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	if concurrency > len(tokens) {
+		concurrency = len(tokens)
+	}
+	jobs := make(chan string)
+	results := make([]map[string]any, 0, len(tokens))
+	totalAssets := 0
+	mu := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for token := range jobs {
+				var resp map[string]any
+				var err error
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					err = ctxErr
+				} else {
+					resp, err = list(ctx, token)
+				}
+				row := extractAssetRows(token, resp, err)
+				mu.Lock()
+				results = append(results, row)
+				if count, _ := row["count"].(int); count > 0 {
+					totalAssets += count
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, token := range tokens {
+		jobs <- token
+	}
+	close(jobs)
+	wg.Wait()
+	return results, totalAssets
 }
 
 func (s *Server) handleAssetsDeleteItem(c *gin.Context) {

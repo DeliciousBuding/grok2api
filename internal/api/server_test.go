@@ -1316,6 +1316,67 @@ func TestAdminAssetsListUsesBoundedPaginationAndFilters(t *testing.T) {
 	}
 }
 
+func TestCollectAssetRowsBoundsActiveListCalls(t *testing.T) {
+	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
+	started := make(chan struct{}, len(tokens))
+	release := make(chan struct{})
+	mu := sync.Mutex{}
+	active := 0
+	maxActive := 0
+
+	done := make(chan struct{})
+	var rows []map[string]any
+	var total int
+	go func() {
+		rows, total = collectAssetRows(context.Background(), tokens, 2, func(ctx context.Context, token string) (map[string]any, error) {
+			mu.Lock()
+			active++
+			if active > maxActive {
+				maxActive = active
+			}
+			mu.Unlock()
+			started <- struct{}{}
+			<-release
+			mu.Lock()
+			active--
+			mu.Unlock()
+			return map[string]any{"assets": []any{map[string]any{"id": token + "-asset"}}}, nil
+		})
+		close(done)
+	}()
+
+	for i := 0; i < 2; i++ {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("asset workers did not start")
+		}
+	}
+	select {
+	case <-started:
+		close(release)
+		t.Fatal("started more asset list calls than configured concurrency before release")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("asset workers did not finish")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if maxActive > 2 {
+		t.Fatalf("expected max active asset list calls <= 2, got %d", maxActive)
+	}
+	if len(rows) != len(tokens) {
+		t.Fatalf("expected one row per token, got %d", len(rows))
+	}
+	if total != len(tokens) {
+		t.Fatalf("expected total asset count %d, got %d", len(tokens), total)
+	}
+}
+
 func TestAdminAssetsListRejectsInvalidQueryValues(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
