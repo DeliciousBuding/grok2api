@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DeliciousBuding/grok2api/internal/tlsclient"
 )
 
 func TestReadUpstreamResponseBodyRejectsOversizedBody(t *testing.T) {
@@ -100,4 +102,55 @@ func TestTransportReturnsDeadlineExceededWithoutUpstreamRequest(t *testing.T) {
 	if requests != 0 {
 		t.Fatalf("expired request should not reach upstream, got %d requests", requests)
 	}
+}
+
+func TestTransportClosesIdleConnectionsWhenClientResets(t *testing.T) {
+	first := &fakeUpstreamClient{body: `{}`}
+	second := &fakeUpstreamClient{body: `{}`}
+	created := []*fakeUpstreamClient{first, second}
+	oldNewClient := newTLSHTTPClient
+	newTLSHTTPClient = func(opts ...tlsclient.Option) upstreamHTTPClient {
+		if len(created) == 0 {
+			t.Fatal("unexpected extra client creation")
+		}
+		c := created[0]
+		created = created[1:]
+		return c
+	}
+	t.Cleanup(func() { newTLSHTTPClient = oldNewClient })
+
+	tr, err := NewTransport()
+	if err != nil {
+		t.Fatalf("new transport: %v", err)
+	}
+	if _, err := tr.GetJSON(context.Background(), "https://example.test/one", "tok-test"); err != nil {
+		t.Fatalf("first request: %v", err)
+	}
+	tr.Reset()
+	if _, err := tr.GetJSON(context.Background(), "https://example.test/two", "tok-test"); err != nil {
+		t.Fatalf("second request: %v", err)
+	}
+
+	if first.closeIdleCalls != 1 {
+		t.Fatalf("expected first client idle connections to close once, got %d", first.closeIdleCalls)
+	}
+	if second.closeIdleCalls != 0 {
+		t.Fatalf("new active client should not be closed, got %d", second.closeIdleCalls)
+	}
+}
+
+type fakeUpstreamClient struct {
+	body           string
+	closeIdleCalls int
+}
+
+func (c *fakeUpstreamClient) Do(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(c.body)),
+	}, nil
+}
+
+func (c *fakeUpstreamClient) CloseIdleConnections() {
+	c.closeIdleCalls++
 }

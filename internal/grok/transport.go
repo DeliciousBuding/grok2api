@@ -29,11 +29,20 @@ const (
 // everything to standard *http.Response so callers never see fhttp.
 type Transport struct {
 	mu           sync.Mutex
-	client       *tlsclient.Client
+	client       upstreamHTTPClient
 	proxyURL     string
 	resetOn      map[int]struct{}
 	resetPending bool
 	extraCookies []*http.Cookie
+}
+
+type upstreamHTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+	CloseIdleConnections()
+}
+
+var newTLSHTTPClient = func(opts ...tlsclient.Option) upstreamHTTPClient {
+	return tlsclient.New(opts...)
 }
 
 // NewTransport builds a Transport from config.
@@ -74,19 +83,23 @@ func (t *Transport) Reset() {
 	t.mu.Unlock()
 }
 
-func (t *Transport) ensureClient() (*tlsclient.Client, error) {
+func (t *Transport) ensureClient() (upstreamHTTPClient, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.client != nil && !t.resetPending {
 		return t.client, nil
 	}
+	old := t.client
 	var opts []tlsclient.Option
 	if t.proxyURL != "" {
 		opts = append(opts, tlsclient.WithProxy(t.proxyURL))
 	}
-	c := tlsclient.New(opts...)
+	c := newTLSHTTPClient(opts...)
 	t.client = c
 	t.resetPending = false
+	if old != nil {
+		old.CloseIdleConnections()
+	}
 	return c, nil
 }
 

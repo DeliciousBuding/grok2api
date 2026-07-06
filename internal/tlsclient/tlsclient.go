@@ -70,6 +70,14 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return toNetHTTP(fresp), nil
 }
 
+// CloseIdleConnections closes idle connections held by the underlying client.
+func (c *Client) CloseIdleConnections() {
+	if c == nil || c.inner == nil {
+		return
+	}
+	c.inner.CloseIdleConnections()
+}
+
 // SetProxy changes the proxy at runtime.
 func (c *Client) SetProxy(raw string) error { return c.inner.SetProxy(raw) }
 
