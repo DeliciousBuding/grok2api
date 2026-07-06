@@ -66,6 +66,36 @@ func TestReserveAccountUsesPreferredTags(t *testing.T) {
 	}
 }
 
+func TestReserveAccountHonorsCanceledContext(t *testing.T) {
+	spec, ok := model.Resolve("grok-4.20-fast")
+	if !ok {
+		t.Fatal("resolve test model")
+	}
+	repo := &snapshotRepo{items: []*account.Record{
+		accountSelectionTestRecord("tok-ready", nil, 30),
+	}}
+	dir := account.NewDirectory(repo)
+	if err := dir.Bootstrap(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	lease, modeID := reserveAccount(ctx, dir, spec, nil, nil)
+
+	if lease != nil {
+		t.Fatalf("expected canceled context to skip account reservation, got token=%q", lease.Token)
+	}
+	if modeID != int(model.ModeFast) {
+		t.Fatalf("expected fallback mode id %d, got %d", int(model.ModeFast), modeID)
+	}
+	for _, slot := range dir.Snapshot() {
+		if slot.Inflight != 0 {
+			t.Fatalf("canceled reservation should not increment inflight, snapshot=%#v", dir.Snapshot())
+		}
+	}
+}
+
 func TestChatCompletionRequestPreferTagsNormalizesInput(t *testing.T) {
 	req := &chatCompletionRequest{Grok2APIPreferTags: []string{"tenant-b", "", "tenant-a", "tenant-a"}}
 

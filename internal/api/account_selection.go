@@ -43,7 +43,13 @@ func reserveAccount(ctx context.Context, dir *account.Directory, spec *model.Spe
 	if dir == nil || spec == nil {
 		return nil, 0
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, int(spec.ModeId)
+	}
 	for _, modeID := range modeCandidates(spec) {
+		if err := ctx.Err(); err != nil {
+			return nil, int(spec.ModeId)
+		}
 		lease, _ := dir.Reserve(spec.PoolCandidates(), modeID, exclude, preferTags)
 		if lease != nil {
 			return lease, lease.ModeID
