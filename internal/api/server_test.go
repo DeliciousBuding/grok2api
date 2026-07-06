@@ -784,6 +784,57 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_fetch_image_concurrency = 1\n")
+
+	var current int32
+	var maxSeen int32
+	entered := make(chan struct{}, 2)
+	releaseFirst := make(chan struct{})
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		now := atomic.AddInt32(&current, 1)
+		for {
+			seen := atomic.LoadInt32(&maxSeen)
+			if now <= seen || atomic.CompareAndSwapInt32(&maxSeen, seen, now) {
+				break
+			}
+		}
+		entered <- struct{}{}
+		if now == 1 {
+			<-releaseFirst
+		}
+		_, _ = w.Write([]byte("ok"))
+		atomic.AddInt32(&current, -1)
+	}))
+	t.Cleanup(upstream.Close)
+
+	errCh := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			_, err := fetchImageBase64(context.Background(), upstream.URL+"/image.png")
+			errCh <- err
+		}()
+	}
+
+	<-entered
+	select {
+	case <-entered:
+		close(releaseFirst)
+		t.Fatal("second image fetch reached upstream before concurrency slot was released")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseFirst)
+
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err != nil {
+			t.Fatalf("fetch %d failed: %v", i, err)
+		}
+	}
+	if got := atomic.LoadInt32(&maxSeen); got > 1 {
+		t.Fatalf("expected at most 1 concurrent upstream fetch, saw %d", got)
+	}
+}
+
 func TestCaptureLiteImageBatchHonorsCanceledContextBeforeFanout(t *testing.T) {
 	loadTestConfig(t, "")
 	spec, ok := model.Resolve("grok-imagine-image-lite")

@@ -443,11 +443,62 @@ func extractImageURLsFromMarkdown(text string) []string {
 	return out
 }
 
+var fetchImageLimiter = newDynamicConcurrencyLimiter()
+
+type dynamicConcurrencyLimiter struct {
+	mu       sync.Mutex
+	inflight int
+	changed  chan struct{}
+}
+
+func newDynamicConcurrencyLimiter() *dynamicConcurrencyLimiter {
+	return &dynamicConcurrencyLimiter{changed: make(chan struct{})}
+}
+
+func (l *dynamicConcurrencyLimiter) acquire(ctx context.Context, limit int) (func(), error) {
+	if limit <= 0 {
+		return func() {}, nil
+	}
+	for {
+		l.mu.Lock()
+		if l.inflight < limit {
+			l.inflight++
+			l.mu.Unlock()
+			return l.release, nil
+		}
+		changed := l.changed
+		l.mu.Unlock()
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-changed:
+		}
+	}
+}
+
+func (l *dynamicConcurrencyLimiter) release() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.inflight > 0 {
+		l.inflight--
+	}
+	close(l.changed)
+	l.changed = make(chan struct{})
+}
+
 // fetchImageBase64 downloads the image bytes and returns the base64 encoding.
 func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	limit := config.Global().GetInt("asset.max_fetch_image_concurrency", 0)
+	release, err := fetchImageLimiter.acquire(ctx, limit)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+
 	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
