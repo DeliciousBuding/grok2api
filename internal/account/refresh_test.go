@@ -116,6 +116,33 @@ func TestRefreshTokensInvalidShortTokenDoesNotPanic(t *testing.T) {
 	}
 }
 
+func TestRefreshTokensStopsAfterContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repo := NewTxtRepository(t.TempDir() + "/accounts.jsonl")
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("initialize repo: %v", err)
+	}
+	if _, err := repo.UpsertAccounts(ctx, []Upsert{
+		{Token: "tok-a", Pool: "basic"},
+		{Token: "tok-b", Pool: "basic"},
+	}); err != nil {
+		t.Fatalf("upsert accounts: %v", err)
+	}
+	fetcher := &cancelingQuotaFetcher{cancel: cancel}
+	service := NewRefreshService(repo, fetcher)
+
+	refreshed, failed, err := service.RefreshTokens(ctx, []string{"tok-a", "tok-b"})
+	if err != nil {
+		t.Fatalf("refresh tokens should report counts without returning a batch error: %v", err)
+	}
+	if refreshed != 0 || failed != 1 {
+		t.Fatalf("expected only first canceled token to be counted, got refreshed=%d failed=%d", refreshed, failed)
+	}
+	if got := fetcher.callCount(); got != 1 {
+		t.Fatalf("expected context cancellation to stop remaining token refreshes, got %d upstream calls", got)
+	}
+}
+
 func TestRefreshScheduledRefreshesAccountsBeyondFirstPage(t *testing.T) {
 	ctx := context.Background()
 	const accountCount = 3
@@ -186,6 +213,32 @@ func (f *blockingQuotaFetcher) FetchModeQuota(ctx context.Context, token, pool s
 }
 
 func (f *blockingQuotaFetcher) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
+type cancelingQuotaFetcher struct {
+	mu     sync.Mutex
+	calls  int
+	cancel context.CancelFunc
+}
+
+func (f *cancelingQuotaFetcher) FetchAllQuotas(ctx context.Context, token, pool string, bootstrap bool) (map[int]ModeQuota, error) {
+	f.mu.Lock()
+	f.calls++
+	f.mu.Unlock()
+	if f.cancel != nil {
+		f.cancel()
+	}
+	return nil, ctx.Err()
+}
+
+func (f *cancelingQuotaFetcher) FetchModeQuota(ctx context.Context, token, pool string, modeID int) (*ModeQuota, error) {
+	return nil, ctx.Err()
+}
+
+func (f *cancelingQuotaFetcher) callCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls

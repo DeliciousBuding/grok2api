@@ -76,6 +76,9 @@ func (s *RefreshService) RefreshTokens(ctx context.Context, tokens []string) (in
 	failed := 0
 	seen := map[string]struct{}{}
 	for _, raw := range tokens {
+		if ctx.Err() != nil {
+			break
+		}
 		tok := platform.SanitizeToken(raw)
 		if tok == "" {
 			failed++

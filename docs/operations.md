@@ -171,6 +171,8 @@ Use account tags for soft workload routing. Add tags through the admin token API
 
 Quota refresh requests deduplicate repeated tokens in one batch and coalesce concurrent refreshes for the same token inside one process. This reduces success-feedback and admin-refresh fan-out under high concurrency; it is not a distributed lock across multiple running gateway instances.
 
+Batch quota refresh stops scheduling remaining tokens after its context is canceled. This keeps admin-triggered and feedback-triggered refresh work from continuing to call upstream services after the parent request, timeout, or background deadline has expired.
+
 When any mode-level quota refresh observes an upstream invalid-credentials response, the refresh cancels the sibling mode requests and returns the credential error promptly. This prevents one expired account from waiting on unrelated per-mode request timeouts before it can be marked expired.
 
 Scheduled quota refresh scans account pages in stable token order before applying mutations, so account pools larger than one backend page and accounts expiring during a refresh pass are not skipped.
