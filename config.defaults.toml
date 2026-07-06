@@ -122,6 +122,8 @@ delete_timeout = 60
 max_download_bytes = 31457280
 # 图像编辑 multipart 源图最大字节数，<=0 使用安全默认值 30MiB
 max_inline_image_bytes = 31457280
+# response_format=b64_json 时抓取图片最大字节数，<=0 使用安全默认值 50MiB
+max_fetch_image_bytes = 52428800
 
 [upstream]
 # 非流式上游响应最大字节数，<=0 使用安全默认值 16MiB

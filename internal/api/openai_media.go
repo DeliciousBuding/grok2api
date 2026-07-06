@@ -80,7 +80,10 @@ func (s *Server) handleFileVideo(c *gin.Context) {
 
 // --- Image generation (standalone) ---
 
-const defaultImageEditMaxFileBytes = 30 << 20
+const (
+	defaultImageEditMaxFileBytes = 30 << 20
+	defaultFetchImageMaxBytes    = 50 << 20
+)
 
 func (s *Server) handleImageGenerations(c *gin.Context) {
 	var req struct {
@@ -435,11 +438,29 @@ func fetchImageBase64(url string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 50<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("image fetch returned %d", resp.StatusCode)
+	}
+	body, err := readFetchedImageBytes(resp.Body)
 	if err != nil {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(body), nil
+}
+
+func readFetchedImageBytes(r io.Reader) ([]byte, error) {
+	limit := config.Global().GetInt("asset.max_fetch_image_bytes", defaultFetchImageMaxBytes)
+	if limit <= 0 {
+		limit = defaultFetchImageMaxBytes
+	}
+	body, err := io.ReadAll(io.LimitReader(r, int64(limit)+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > limit {
+		return nil, fmt.Errorf("image fetch exceeds %d bytes", limit)
+	}
+	return body, nil
 }
 
 // --- Video jobs (async) ---

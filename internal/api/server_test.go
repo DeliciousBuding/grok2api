@@ -686,6 +686,39 @@ func TestReadImageEditFileBytesUsesDefaultLimitWhenUnconfigured(t *testing.T) {
 	}
 }
 
+func TestFetchImageBase64RejectsNonSuccessStatus(t *testing.T) {
+	loadTestConfig(t, "")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := fetchImageBase64(upstream.URL + "/missing.png")
+	if err == nil {
+		t.Fatal("expected non-success image response to fail")
+	}
+	if !strings.Contains(err.Error(), "image fetch returned 404") {
+		t.Fatalf("expected status error, got %v", err)
+	}
+}
+
+func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_fetch_image_bytes = 4\n")
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("12345"))
+	}))
+	t.Cleanup(upstream.Close)
+
+	_, err := fetchImageBase64(upstream.URL + "/image.png")
+	if err == nil {
+		t.Fatal("expected oversized fetched image to fail")
+	}
+	if !strings.Contains(err.Error(), "image fetch exceeds") {
+		t.Fatalf("expected size-limit error, got %v", err)
+	}
+}
+
 func TestAdminBatchCacheClearRejectsEmptyTokensBeforeRefreshCheck(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
