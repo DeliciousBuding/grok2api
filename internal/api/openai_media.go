@@ -454,6 +454,7 @@ func extractImageURLsFromMarkdown(text string) []string {
 }
 
 var fetchImageLimiter = newDynamicConcurrencyLimiter()
+var fetchImageTransport http.RoundTripper = http.DefaultTransport.(*http.Transport).Clone()
 
 type dynamicConcurrencyLimiter struct {
 	mu       sync.Mutex
@@ -509,7 +510,7 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	}
 	defer release()
 
-	client := &http.Client{Timeout: fetchImageTimeout()}
+	client := fetchImageHTTPClient()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return "", err
@@ -527,6 +528,13 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(body), nil
+}
+
+func fetchImageHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: fetchImageTransport,
+		Timeout:   fetchImageTimeout(),
+	}
 }
 
 func fetchImageTimeout() time.Duration {

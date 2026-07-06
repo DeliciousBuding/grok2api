@@ -805,6 +805,27 @@ func TestFetchImageBase64UsesConfiguredTimeout(t *testing.T) {
 	}
 }
 
+func TestFetchImageHTTPClientSharesTransportWithCurrentTimeout(t *testing.T) {
+	loadTestConfig(t, "[asset]\nfetch_image_timeout_sec = 1\n")
+	first := fetchImageHTTPClient()
+
+	loadTestConfig(t, "[asset]\nfetch_image_timeout_sec = 2\n")
+	second := fetchImageHTTPClient()
+
+	if first.Transport == nil || second.Transport == nil {
+		t.Fatal("expected image fetch clients to use an explicit reusable transport")
+	}
+	if first.Transport != second.Transport {
+		t.Fatal("expected image fetch clients to share the same transport for connection reuse")
+	}
+	if first.Timeout != time.Second {
+		t.Fatalf("expected first timeout 1s, got %s", first.Timeout)
+	}
+	if second.Timeout != 2*time.Second {
+		t.Fatalf("expected second timeout 2s, got %s", second.Timeout)
+	}
+}
+
 func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	loadTestConfig(t, "[asset]\nmax_fetch_image_concurrency = 1\n")
 
