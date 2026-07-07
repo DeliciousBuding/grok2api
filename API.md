@@ -542,6 +542,8 @@ Response shape:
 
 Replaces all tokens in one or more pools. Pool names must be valid and each pool value must be an array; invalid pools or malformed pool payloads return HTTP 400 instead of being silently ignored.
 
+Token mutation endpoints accept at most 1000 unique valid tokens per request. This applies to `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, `DELETE /admin/api/tokens`, `POST /admin/api/tokens/disabled/batch`, and `PUT /admin/api/pool`; oversized lists return `too_many_tokens` before storage or background refresh work starts.
+
 ### Pool & Batch Operations
 
 | Method | Path | Description |

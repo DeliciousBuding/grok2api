@@ -130,7 +130,8 @@ const (
 
 	adminDefaultBatchConcurrency = 50
 	adminMaxBatchConcurrency     = 80
-	adminMaxBatchTokens          = 1000
+	adminMaxTokenMutationTokens  = 1000
+	adminMaxBatchTokens          = adminMaxTokenMutationTokens
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000
@@ -332,6 +333,11 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 	}
 	total := 0
 	allTokens := []string{}
+	type poolUpserts struct {
+		pool    string
+		upserts []account.Upsert
+	}
+	ops := []poolUpserts{}
 	for poolName, items := range body {
 		if poolName == "" {
 			writeAppError(c, platform.ValidationErrorCode("Pool name is required", "pool", "invalid_pool"))
@@ -348,6 +354,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 			return
 		}
 		upserts := []account.Upsert{}
+		seen := map[string]bool{}
 		for _, item := range tokenList {
 			var token string
 			var tags []string
@@ -367,20 +374,28 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 				}
 			}
 			token = platform.SanitizeToken(token)
-			if token == "" {
+			if token == "" || seen[token] {
 				continue
 			}
+			seen[token] = true
 			upserts = append(upserts, account.Upsert{Token: token, Pool: poolName, Tags: account.SortTags(tags)})
 			allTokens = append(allTokens, token)
 		}
+		total += len(upserts)
+		if err := ensureAdminTokenMutationLimit(total); err != nil {
+			writeAppError(c, err)
+			return
+		}
+		ops = append(ops, poolUpserts{pool: poolName, upserts: upserts})
+	}
+	for _, op := range ops {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
-		_, err := s.Repo.ReplacePool(ctx, poolName, upserts)
+		_, err := s.Repo.ReplacePool(ctx, op.pool, op.upserts)
 		cancel()
 		if err != nil {
 			writeAppError(c, err)
 			return
 		}
-		total += len(upserts)
 	}
 	tokenIDs := adminAuditTokenIDs(allTokens)
 	setAdminAudit(c, AdminAuditEvent{
@@ -415,11 +430,16 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Invalid pool '"+pool+"'", "pool", "invalid_pool"))
 		return
 	}
+	tokens, err := sanitizeAdminTokenMutationTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	tags := account.SortTags(body.Tags)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 
-	existing, err := s.Repo.GetAccounts(ctx, body.Tokens)
+	existing, err := s.Repo.GetAccounts(ctx, tokens)
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -433,13 +453,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 	var newTokens []string
 	upserts := []account.Upsert{}
 	skipped := 0
-	seen := map[string]bool{}
-	for _, raw := range body.Tokens {
-		tok := platform.SanitizeToken(raw)
-		if tok == "" || seen[tok] {
-			continue
-		}
-		seen[tok] = true
+	for _, tok := range tokens {
 		if existingActive[tok] {
 			skipped++
 			continue
@@ -523,18 +537,9 @@ func (s *Server) handleTokensDelete(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	clean := []string{}
-	seen := map[string]bool{}
-	for _, t := range tokens {
-		t = platform.SanitizeToken(t)
-		if t == "" || seen[t] {
-			continue
-		}
-		seen[t] = true
-		clean = append(clean, t)
-	}
-	if len(clean) == 0 {
-		writeAppError(c, platform.ValidationError("No valid tokens provided", "tokens"))
+	clean, err := sanitizeAdminTokenMutationTokens(tokens)
+	if err != nil {
+		writeAppError(c, err)
 		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
@@ -714,15 +719,10 @@ func (s *Server) handleTokensToggleDisabledBatch(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	clean := []string{}
-	seen := map[string]bool{}
-	for _, t := range body.Tokens {
-		t = platform.SanitizeToken(t)
-		if t == "" || seen[t] {
-			continue
-		}
-		seen[t] = true
-		clean = append(clean, t)
+	clean, err := sanitizeAdminTokenMutationTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
+		return
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 30))
 	defer cancel()
@@ -804,15 +804,14 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 		writeAppError(c, platform.ValidationErrorCode("Invalid pool '"+pool+"'", "pool", "invalid_pool"))
 		return
 	}
+	tokens, err := sanitizeAdminTokenMutationTokens(body.Tokens)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	tags := account.SortTags(body.Tags)
 	upserts := []account.Upsert{}
-	seen := map[string]bool{}
-	for _, raw := range body.Tokens {
-		tok := platform.SanitizeToken(raw)
-		if tok == "" || seen[tok] {
-			continue
-		}
-		seen[tok] = true
+	for _, tok := range tokens {
 		upserts = append(upserts, account.Upsert{Token: tok, Pool: pool, Tags: tags})
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
@@ -1602,18 +1601,37 @@ func sanitizeTokenList(raw []string) []string {
 }
 
 func sanitizeAdminBatchTokens(raw []string) ([]string, error) {
+	return sanitizeBoundedAdminTokens(raw, adminMaxBatchTokens)
+}
+
+func sanitizeAdminTokenMutationTokens(raw []string) ([]string, error) {
+	return sanitizeBoundedAdminTokens(raw, adminMaxTokenMutationTokens)
+}
+
+func sanitizeBoundedAdminTokens(raw []string, max int) ([]string, error) {
 	tokens := sanitizeTokenList(raw)
 	if len(tokens) == 0 {
 		return nil, platform.ValidationError("No tokens provided", "tokens")
 	}
-	if len(tokens) > adminMaxBatchTokens {
+	if len(tokens) > max {
 		return nil, platform.ValidationErrorCode(
-			fmt.Sprintf("tokens must be <= %d", adminMaxBatchTokens),
+			fmt.Sprintf("tokens must be <= %d", max),
 			"tokens",
 			"too_many_tokens",
 		)
 	}
 	return tokens, nil
+}
+
+func ensureAdminTokenMutationLimit(n int) error {
+	if n > adminMaxTokenMutationTokens {
+		return platform.ValidationErrorCode(
+			fmt.Sprintf("tokens must be <= %d", adminMaxTokenMutationTokens),
+			"tokens",
+			"too_many_tokens",
+		)
+	}
+	return nil
 }
 
 func sanitizeAdminCacheItemNames(raw []string) ([]string, error) {

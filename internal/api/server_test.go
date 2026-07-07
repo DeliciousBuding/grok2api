@@ -785,6 +785,42 @@ func TestAdminBatchRejectsTooManyTokensBeforeWork(t *testing.T) {
 	}
 }
 
+func TestAdminTokenMutationsRejectTooManyTokensBeforeWork(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	n := adminMaxBatchTokens + 1
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "add", method: http.MethodPost, path: "/admin/api/tokens/add", body: tokenMutationBodyJSON(n, "add")},
+		{name: "replace", method: http.MethodPost, path: "/admin/api/tokens", body: tokenMutationBodyJSON(n, "replace")},
+		{name: "delete", method: http.MethodDelete, path: "/admin/api/tokens", body: tokenMutationBodyJSON(n, "delete")},
+		{name: "disable batch", method: http.MethodPost, path: "/admin/api/tokens/disabled/batch", body: tokenMutationBodyJSON(n, "disabled")},
+		{name: "pool replace", method: http.MethodPut, path: "/admin/api/pool", body: tokenMutationBodyJSON(n, "pool")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "too_many_tokens") {
+				t.Fatalf("expected too_many_tokens error, got %s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
 	started := make(chan struct{}, len(tokens))
@@ -2249,6 +2285,32 @@ func batchTokensJSON(n int) string {
 	}
 	b.WriteString(`]}`)
 	return b.String()
+}
+
+func tokenMutationBodyJSON(n int, shape string) string {
+	var tokens strings.Builder
+	tokens.WriteByte('[')
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			tokens.WriteByte(',')
+		}
+		fmt.Fprintf(&tokens, `"tok-%04d"`, i)
+	}
+	tokens.WriteByte(']')
+	switch shape {
+	case "add":
+		return `{"tokens":` + tokens.String() + `,"pool":"basic"}`
+	case "replace":
+		return `{"basic":` + tokens.String() + `}`
+	case "delete":
+		return tokens.String()
+	case "disabled":
+		return `{"tokens":` + tokens.String() + `,"disabled":true}`
+	case "pool":
+		return `{"pool":"basic","tokens":` + tokens.String() + `}`
+	default:
+		return `{}`
+	}
 }
 
 func cacheNamesJSON(n int) string {

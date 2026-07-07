@@ -161,6 +161,8 @@ Request-path config reload checks are throttled to avoid filesystem stat and TOM
 
 Admin batch endpoints use fixed worker pools bounded by the `concurrency` query parameter and reject batches above 1000 unique valid tokens with `too_many_tokens`. This bounds goroutine growth and per-request result memory for large token lists; tune `concurrency` for upstream pressure, not for request body size.
 
+Admin token mutation endpoints also reject requests above 1000 unique valid tokens with `too_many_tokens` before storage or background refresh work starts. Split larger imports, deletes, disabled-state batches, and pool replacements into smaller requests.
+
 Admin cache multi-delete rejects requests above 1000 non-empty file names with `too_many_file_names`. This keeps one admin request from allocating or iterating over an unbounded cache-deletion list.
 
 Admin token imports start quota refresh work through a small bounded background task gate. If the gate is saturated, the import still records the tokens and logs a count-only skip event rather than spawning unbounded detached refresh goroutines.
