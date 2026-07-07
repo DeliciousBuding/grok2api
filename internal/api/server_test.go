@@ -545,6 +545,39 @@ func TestVideoAdmissionReleasesWhenBackgroundJobFails(t *testing.T) {
 	}
 }
 
+func TestHandleVideoCreateRejectsWhenVideoJobCapacityExhausted(t *testing.T) {
+	resetVideoJobsForTest(t)
+	server := NewServer(nil, nil, nil, nil, nil)
+	server.videoJobs = make(chan struct{}, 1)
+	server.videoJobs <- struct{}{}
+
+	body, contentType := makeMultipartBody(t, map[string]string{
+		"model":  "grok-imagine-video",
+		"prompt": "a city",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/videos", body)
+	req.Header.Set("Content-Type", contentType)
+	w := httptest.NewRecorder()
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 when active video job capacity is exhausted, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "video_job_capacity_exhausted") {
+		t.Fatalf("expected video_job_capacity_exhausted response, got %s", w.Body.String())
+	}
+	if got := server.Admission.Snapshot()["model:grok-imagine-video"]; got != 0 {
+		t.Fatalf("rejected video request should release model admission, got %d", got)
+	}
+	videoJobsMutex.Lock()
+	size := len(videoJobsMap)
+	videoJobsMutex.Unlock()
+	if size != 0 {
+		t.Fatalf("rejected video request should not register a job, got %d jobs", size)
+	}
+}
+
 func TestVideoJobSnapshotIsRaceSafeDuringFailureUpdates(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 	job := &videoJob{

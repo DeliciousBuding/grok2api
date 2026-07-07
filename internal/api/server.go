@@ -33,6 +33,7 @@ type Server struct {
 	AdminAudit AdminAuditSink
 
 	adminBackground chan struct{}
+	videoJobs       chan struct{}
 }
 
 type streamResponseError struct {
@@ -74,11 +75,13 @@ func NewServer(repo account.Repository, dir *account.Directory, refresh *account
 		Metrics:   metrics.NewRegistry(),
 
 		adminBackground: make(chan struct{}, adminBackgroundConcurrency),
+		videoJobs:       make(chan struct{}, videoJobConcurrency),
 	}
 }
 
 const (
 	adminBackgroundConcurrency = 2
+	videoJobConcurrency        = 64
 	admissionMaxInflight       = 10000
 )
 
@@ -101,6 +104,29 @@ func (s *Server) tryStartAdminBackgroundTask(timeout time.Duration, work func(co
 		work(ctx)
 	}()
 	return true
+}
+
+func (s *Server) tryAcquireVideoJob(c *gin.Context) (func(), bool) {
+	if s.videoJobs == nil {
+		s.videoJobs = make(chan struct{}, videoJobConcurrency)
+	}
+	select {
+	case s.videoJobs <- struct{}{}:
+		return func() { <-s.videoJobs }, true
+	default:
+		writeVideoJobCapacityRejected(c)
+		return nil, false
+	}
+}
+
+func writeVideoJobCapacityRejected(c *gin.Context) {
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+		"error": gin.H{
+			"message": "Video job capacity exhausted",
+			"type":    "rate_limit_error",
+			"code":    "video_job_capacity_exhausted",
+		},
+	})
 }
 
 // Router builds the gin.Engine for the whole API surface.

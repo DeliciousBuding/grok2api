@@ -993,6 +993,11 @@ func (s *Server) handleVideoCreate(c *gin.Context) {
 	if !ok {
 		return
 	}
+	releaseVideoJob, ok := s.tryAcquireVideoJob(c)
+	if !ok {
+		releaseAdmission()
+		return
+	}
 
 	job := &videoJob{
 		ID:        "video_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:24],
@@ -1008,7 +1013,10 @@ func (s *Server) handleVideoCreate(c *gin.Context) {
 	}
 	registerVideoJob(job)
 
-	go s.runVideoJob(job, prompt, modelName, spec, releaseAdmission)
+	go s.runVideoJob(job, prompt, modelName, spec, func() {
+		releaseVideoJob()
+		releaseAdmission()
+	})
 	c.JSON(http.StatusOK, job.toDict())
 }
 
