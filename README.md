@@ -285,12 +285,12 @@ dsn = ""                        # 预留：未来 pg+redis 后端
 addr = ""                       # 预留：未来 pg+redis 后端
 
 [timeout]
-chat_sec = 300                  # 聊天上游超时（秒）
-console_sec = 300               # Console 上游超时（秒）
-image_sec = 300                 # 图像上游超时（秒）
-video_sec = 600                 # 视频上游超时（秒）
+chat_sec = 300                  # 聊天上游超时（秒，正数有效上限 3600）
+console_sec = 300               # Console 上游超时（秒，正数有效上限 3600）
+image_sec = 300                 # 图像上游超时（秒，正数有效上限 3600）
+video_sec = 600                 # 视频上游超时（秒，正数有效上限 3600）
 stream_idle_sec = 60            # 流式响应上游单次静默超时（秒），0 = 禁用
-admin_sec = 60                  # 管理操作超时（秒）
+admin_sec = 60                  # 管理操作超时（秒，正数有效上限 3600）
 
 [asset]
 upload_timeout = 60             # 资源上传超时（秒）

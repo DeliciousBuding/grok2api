@@ -137,6 +137,14 @@ func TestTimeoutClassDurationReadsConfigAndRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestTimeoutClassDurationClampsMisconfiguredLargeValue(t *testing.T) {
+	loadTestConfig(t, "[timeout]\nchat_sec = 86400\n")
+
+	if got := timeoutClassDuration("chat", 300); got != maxTimeoutClassDuration {
+		t.Fatalf("timeoutClassDuration should clamp large values to %v, got %v", maxTimeoutClassDuration, got)
+	}
+}
+
 func loadTestConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()

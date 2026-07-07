@@ -91,12 +91,18 @@ func shouldRetryAttempt(err error, attempt, maxRetries int) bool {
 	return shouldRetryUpstream(err) && attempt < maxRetries
 }
 
+const maxTimeoutClassDuration = time.Hour
+
 func timeoutClassDuration(class string, defaultSec int) time.Duration {
 	n := config.Global().GetInt("timeout."+class+"_sec", defaultSec)
 	if n <= 0 {
 		n = defaultSec
 	}
-	return time.Duration(n) * time.Second
+	d := time.Duration(n) * time.Second
+	if d > maxTimeoutClassDuration {
+		return maxTimeoutClassDuration
+	}
+	return d
 }
 
 func requestWithTimeoutClass(r *http.Request, class string, defaultSec int) (*http.Request, context.CancelFunc) {
