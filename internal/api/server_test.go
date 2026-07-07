@@ -63,6 +63,14 @@ func TestRequestSizeMiddlewareRejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestRequestBodyLimitClampsMisconfiguredLargeValue(t *testing.T) {
+	loadTestConfig(t, "[server]\nmax_body_bytes = 1073741824\n")
+
+	if got := requestBodyLimit(nil); got != 256<<20 {
+		t.Fatalf("expected configured request body limit to clamp to 256MiB, got %d", got)
+	}
+}
+
 func TestRequestSizeMiddlewareReportsChunkedOversizedJSONAs413(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n[server]\nmax_body_bytes = 8\n")
 

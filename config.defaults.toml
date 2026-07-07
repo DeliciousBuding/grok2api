@@ -12,7 +12,7 @@ max_files = 7
 
 # ==================== HTTP 服务资源边界 ====================
 [server]
-# 请求体最大字节数；0 = 非 multipart 写请求使用内置 10MiB 默认上限。
+# 请求体最大字节数；0 = 非 multipart 写请求使用内置 10MiB 默认上限；正数有效上限 256MiB。
 max_body_bytes = 0
 # HTTP 请求头读取超时（秒），0 = 禁用。
 read_header_timeout_sec = 30

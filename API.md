@@ -508,6 +508,8 @@ Grok asset and NSFW maintenance timeouts (`asset.upload_timeout`, `asset.list_ti
 
 Local media cache budgets (`cache.local.image_max_mb` and `cache.local.video_max_mb`) use MiB units. `0` disables size-based eviction, negative values are treated as `0`, and positive values are capped at 1048576 MiB before conversion to bytes.
 
+Request body limits (`server.max_body_bytes`) apply to both declared and streamed bodies. `0` keeps the built-in 10MiB default for non-multipart writes; positive values are capped at 256MiB before the body reader is wrapped.
+
 ### Token Management
 
 | Method | Path | Description |

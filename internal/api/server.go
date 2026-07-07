@@ -199,7 +199,10 @@ func configReloadMiddleware() gin.HandlerFunc {
 
 const requestConfigReloadMinInterval = 500 * time.Millisecond
 
-const defaultNonMultipartMaxBodyBytes = 10 << 20
+const (
+	defaultNonMultipartMaxBodyBytes = 10 << 20
+	maxConfiguredRequestBodyBytes   = 256 << 20
+)
 
 // --- shared helpers ---
 
@@ -280,6 +283,9 @@ func requestSizeMiddleware() gin.HandlerFunc {
 func requestBodyLimit(c *gin.Context) int {
 	limit := config.Global().GetInt("server.max_body_bytes", 0)
 	if limit > 0 {
+		if limit > maxConfiguredRequestBodyBytes {
+			return maxConfiguredRequestBodyBytes
+		}
 		return limit
 	}
 	if c == nil || c.Request == nil || c.Request.Body == nil {

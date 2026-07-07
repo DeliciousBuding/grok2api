@@ -222,7 +222,7 @@ file_level = "INFO"             # 文件日志级别
 max_files = 7                   # 日志文件最大保留数
 
 [server]
-max_body_bytes = 0              # 请求体最大字节数；0 = 非 multipart 写请求使用内置 10MiB 默认上限
+max_body_bytes = 0              # 请求体最大字节数；0 = 非 multipart 写请求使用内置 10MiB 默认上限；正数有效上限 256MiB
 read_header_timeout_sec = 30    # HTTP 请求头读取超时（秒），0 = 禁用
 read_timeout_sec = 0            # HTTP 请求体读取超时（秒），0 = 禁用
 write_timeout_sec = 0           # HTTP 响应写入超时（秒），长流式响应通常保持 0
