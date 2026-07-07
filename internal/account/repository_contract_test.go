@@ -109,3 +109,61 @@ func TestRepositoryRejectsOversizedTokensBeforePersisting(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryRejectsInvalidTagsBeforePersisting(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		repo func(*testing.T) Repository
+	}{
+		{
+			name: "txt",
+			repo: func(t *testing.T) Repository {
+				return NewTxtRepository(filepath.Join(t.TempDir(), "accounts.jsonl"))
+			},
+		},
+		{
+			name: "sqlite",
+			repo: func(t *testing.T) Repository {
+				return NewSQLiteRepository(filepath.Join(t.TempDir(), "accounts.sqlite3"))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := tc.repo(t)
+			if err := repo.Initialize(ctx); err != nil {
+				t.Fatalf("initialize repo: %v", err)
+			}
+			t.Cleanup(func() { _ = repo.Close(ctx) })
+
+			longTag := "tag-" + strings.Repeat("x", 65)
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-long-tag", Tags: []string{longTag}}}); err == nil || !strings.Contains(err.Error(), "tag_too_long") {
+				t.Fatalf("expected tag_too_long from upsert, got %v", err)
+			} else if strings.Contains(err.Error(), strings.Repeat("x", 32)) {
+				t.Fatalf("tag length error should not echo raw tag material: %v", err)
+			}
+
+			tooManyTags := make([]string, 11)
+			for i := range tooManyTags {
+				tooManyTags[i] = "tag-" + string(rune('a'+i))
+			}
+			if _, err := repo.ReplacePool(ctx, "basic", []Upsert{{Token: "tok-many-tags", Tags: tooManyTags}}); err == nil || !strings.Contains(err.Error(), "too_many_tags") {
+				t.Fatalf("expected too_many_tags from replace pool, got %v", err)
+			}
+
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-ok", Tags: []string{"stable"}}}); err != nil {
+				t.Fatalf("seed valid account: %v", err)
+			}
+			if _, err := repo.PatchAccounts(ctx, []Patch{{Token: "tok-ok", Tags: []string{longTag}}}); err == nil || !strings.Contains(err.Error(), "tag_too_long") {
+				t.Fatalf("expected tag_too_long from patch, got %v", err)
+			}
+			recs, err := repo.GetAccounts(ctx, []string{"tok-ok"})
+			if err != nil {
+				t.Fatalf("get patched account: %v", err)
+			}
+			if len(recs) != 1 || len(recs[0].Tags) != 1 || recs[0].Tags[0] != "stable" {
+				t.Fatalf("failed patch should preserve existing tags, got %#v", recs)
+			}
+		})
+	}
+}

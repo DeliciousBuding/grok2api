@@ -142,6 +142,10 @@ func (r *SQLiteRepository) UpsertAccounts(ctx context.Context, items []Upsert) (
 }
 
 func (r *SQLiteRepository) PatchAccounts(ctx context.Context, patches []Patch) (*MutationResult, error) {
+	normalized, err := normalizePatches(patches)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	tx, rev, err := r.beginMutationLocked(ctx)
@@ -152,8 +156,8 @@ func (r *SQLiteRepository) PatchAccounts(ctx context.Context, patches []Patch) (
 
 	now := platform.NowMs()
 	patched := 0
-	for _, p := range patches {
-		tok := platform.SanitizeToken(p.Token)
+	for _, p := range normalized {
+		tok := p.Token
 		if tok == "" {
 			continue
 		}
@@ -544,7 +548,7 @@ func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) {
 		rec.Status = *p.Status
 	}
 	if p.Tags != nil {
-		rec.Tags = SortTags(p.Tags)
+		rec.Tags = p.Tags
 	}
 	if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
 		rec.Tags = MergeTags(rec.Tags, p.AddTags, p.RemoveTags)

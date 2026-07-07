@@ -3,6 +3,8 @@ package account
 import (
 	"context"
 	"errors"
+	"sort"
+	"strings"
 
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
@@ -15,9 +17,15 @@ type Upsert struct {
 	Ext   map[string]any
 }
 
-const MaxTokenLength = 4096
+const (
+	MaxTokenLength = 4096
+	MaxTags        = 10
+	MaxTagLength   = 64
+)
 
 var ErrTokenTooLong = errors.New("token_too_long: account token exceeds maximum length")
+var ErrTagTooLong = errors.New("tag_too_long: account tag exceeds maximum length")
+var ErrTooManyTags = errors.New("too_many_tags: account has too many tags")
 
 func NormalizeAccountToken(raw string) (string, error) {
 	token := platform.SanitizeToken(raw)
@@ -25,6 +33,29 @@ func NormalizeAccountToken(raw string) (string, error) {
 		return "", ErrTokenTooLong
 	}
 	return token, nil
+}
+
+func NormalizeAccountTags(raw []string) ([]string, error) {
+	seen := map[string]bool{}
+	for _, tag := range raw {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if len(tag) > MaxTagLength {
+			return nil, ErrTagTooLong
+		}
+		seen[tag] = true
+		if len(seen) > MaxTags {
+			return nil, ErrTooManyTags
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for tag := range seen {
+		out = append(out, tag)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
@@ -47,12 +78,36 @@ func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
 		if ext == nil {
 			ext = map[string]any{}
 		}
+		tags, err := NormalizeAccountTags(it.Tags)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, Upsert{
 			Token: tok,
 			Pool:  pool,
-			Tags:  SortTags(it.Tags),
+			Tags:  tags,
 			Ext:   ext,
 		})
+	}
+	return out, nil
+}
+
+func normalizePatches(patches []Patch) ([]Patch, error) {
+	out := make([]Patch, len(patches))
+	copy(out, patches)
+	for i := range out {
+		tok, err := NormalizeAccountToken(out[i].Token)
+		if err != nil {
+			return nil, err
+		}
+		out[i].Token = tok
+		if out[i].Tags != nil {
+			tags, err := NormalizeAccountTags(out[i].Tags)
+			if err != nil {
+				return nil, err
+			}
+			out[i].Tags = tags
+		}
 	}
 	return out, nil
 }

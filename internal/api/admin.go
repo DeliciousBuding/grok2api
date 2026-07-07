@@ -150,8 +150,8 @@ const (
 	adminMaxTokenMutationTokens  = 1000
 	adminMaxBatchTokens          = adminMaxTokenMutationTokens
 	adminMaxTokenLength          = account.MaxTokenLength
-	adminMaxTags                 = 10
-	adminMaxTagLength            = 64
+	adminMaxTags                 = account.MaxTags
+	adminMaxTagLength            = account.MaxTagLength
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000

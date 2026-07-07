@@ -121,14 +121,18 @@ func (r *TxtRepository) UpsertAccounts(ctx context.Context, items []Upsert) (*Mu
 }
 
 func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*MutationResult, error) {
+	normalized, err := normalizePatches(patches)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.revision++
 	rev := r.revision
 	now := platform.NowMs()
 	patched := 0
-	for _, p := range patches {
-		tok := platform.SanitizeToken(p.Token)
+	for _, p := range normalized {
+		tok := p.Token
 		if tok == "" {
 			continue
 		}
@@ -143,7 +147,7 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 			rec.Status = *p.Status
 		}
 		if p.Tags != nil {
-			rec.Tags = SortTags(p.Tags)
+			rec.Tags = p.Tags
 		}
 		if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
 			rec.Tags = MergeTags(rec.Tags, p.AddTags, p.RemoveTags)
