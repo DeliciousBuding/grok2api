@@ -504,6 +504,8 @@ Startup-only keys cannot be changed through `POST /admin/api/config`: `account.s
 
 `proxy.clearance` values used in outbound headers and cookies are also bounded at startup and by `POST /admin/api/config`. `user_agent` is limited to 512 characters; `cf_cookies` to 8192 characters; `cf_clearance` to 4096 characters; `device_id`, `x_anonuserid`, `x_challenge`, `x_signature`, `x_userid`, and `statsig_id` to 1024 characters. These fields must not contain CR or LF. Invalid values return HTTP 400 with `invalid_config`; error messages identify the field and rule without echoing raw cookie, token, or fingerprint material.
 
+Grok asset and NSFW maintenance timeouts (`asset.upload_timeout`, `asset.list_timeout`, `asset.delete_timeout`, and `nsfw.timeout`) treat values less than or equal to zero as their built-in defaults and clamp positive values to at most 3600 seconds before creating upstream request contexts.
+
 ### Token Management
 
 | Method | Path | Description |

@@ -18,6 +18,7 @@ import (
 const (
 	defaultAssetMaxDownloadBytes = 30 << 20
 	maxAssetDownloadBytes        = 256 << 20
+	maxGrokOperationTimeout      = time.Hour
 )
 
 // AssetUploadResult is the response from POST /rest/app-chat/upload-file.
@@ -123,8 +124,6 @@ func stripWhitespace(s string) string {
 // UploadFile uploads base64-encoded content to Grok and returns the file
 // metadata ID used as a chat attachment reference.
 func UploadFile(ctx context.Context, t *Transport, token, filename, mime, b64 string) (AssetUploadResult, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("asset.upload_timeout", 60)
 	payload := map[string]any{
 		"fileName":     filename,
 		"fileMimeType": mime,
@@ -135,7 +134,7 @@ func UploadFile(ctx context.Context, t *Transport, token, filename, mime, b64 st
 		return AssetUploadResult{}, platform.UpstreamError("asset upload encode failed: "+err.Error(), 500, "")
 	}
 	resp, err := t.PostJSON(ctx, AssetsUpload, token, body,
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("asset.upload_timeout", 60)),
 	)
 	if err != nil {
 		return AssetUploadResult{}, err
@@ -157,11 +156,9 @@ func UploadFile(ctx context.Context, t *Transport, token, filename, mime, b64 st
 func UploadFromInput(ctx context.Context, t *Transport, token, fileInput string) (AssetUploadResult, error) {
 	if isURL(fileInput) {
 		// Fetch the remote URL through the transport and re-upload as base64.
-		cfg := config.Global()
-		timeoutS := cfg.GetInt("asset.upload_timeout", 60)
 		reader, err := t.GetBytes(ctx, fileInput, token,
 			WithOrigin(""), WithReferer(""),
-			WithTimeout(time.Duration(timeoutS)*time.Second),
+			WithTimeout(configuredGrokOperationTimeout("asset.upload_timeout", 60)),
 		)
 		if err != nil {
 			return AssetUploadResult{}, err
@@ -216,21 +213,29 @@ func configuredAssetDownloadMaxBytes() int {
 	return limit
 }
 
+func configuredGrokOperationTimeout(key string, defaultSec int) time.Duration {
+	n := config.Global().GetInt(key, defaultSec)
+	if n <= 0 {
+		n = defaultSec
+	}
+	d := time.Duration(n) * time.Second
+	if d > maxGrokOperationTimeout {
+		return maxGrokOperationTimeout
+	}
+	return d
+}
+
 // ListAssets returns the asset list for *token*.
 func ListAssets(ctx context.Context, t *Transport, token string) (map[string]any, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("asset.list_timeout", 60)
 	return t.GetJSON(ctx, AssetsListURL, token,
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("asset.list_timeout", 60)),
 	)
 }
 
 // DeleteAsset deletes a single asset by ID.
 func DeleteAsset(ctx context.Context, t *Transport, token, assetID string) (map[string]any, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("asset.delete_timeout", 60)
 	return t.DeleteJSON(ctx, AssetsDeleteURL+"/"+assetID, token,
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("asset.delete_timeout", 60)),
 	)
 }
 

@@ -117,11 +117,17 @@ max_retries = 1
 stream_idle_sec = 60
 
 [asset]
+upload_timeout = 60
+list_timeout = 60
+delete_timeout = 60
 max_download_bytes = 31457280
 max_inline_image_bytes = 31457280
 max_fetch_image_bytes = 52428800
 fetch_image_timeout_sec = 30
 max_fetch_image_concurrency = 0
+
+[nsfw]
+timeout = 60
 
 [upstream]
 max_response_bytes = 16777216
@@ -138,6 +144,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 Outbound clearance header and cookie config is bounded before it can be used. `proxy.clearance.user_agent` is limited to 512 characters, `cf_cookies` to 8192 characters, `cf_clearance` to 4096 characters, and `device_id` / `x_anonuserid` / `x_challenge` / `x_signature` / `x_userid` / `statsig_id` to 1024 characters each. CR/LF is rejected for all of these fields so copied browser values cannot inject additional headers or amplify outbound request memory. Runtime admin updates return `invalid_config` before persistence when these limits are violated.
 
 `asset.max_download_bytes` caps remote image/file downloads before they are re-uploaded to the upstream service. Values less than or equal to zero use the built-in 30MiB safety default.
+
+`asset.upload_timeout`, `asset.list_timeout`, `asset.delete_timeout`, and `nsfw.timeout` bound Grok asset and account-preference maintenance calls. Values less than or equal to zero use their built-in defaults, and positive values are capped at 3600 seconds.
 
 `asset.max_inline_image_bytes` caps each multipart source image submitted to the image-edit endpoint. Oversized files return `image_file_too_large` instead of being truncated.
 

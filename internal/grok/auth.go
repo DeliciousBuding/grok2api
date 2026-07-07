@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/DeliciousBuding/grok2api/internal/config"
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
@@ -63,13 +62,11 @@ func BuildSetBirthPayload() map[string]any {
 
 // AcceptTOS calls SetTosAcceptedVersion on accounts.x.ai.
 func AcceptTOS(ctx context.Context, t *Transport, token string) (GRPCStatus, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("nsfw.timeout", 30)
 	_, trailers, err := t.PostGRPCWeb(ctx, AcceptTOSURL, token,
 		BuildAcceptTOSPayload(),
 		WithOrigin(AccountsBase),
 		WithReferer(AccountsBase+"/accept-tos"),
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("nsfw.timeout", 30)),
 	)
 	if err != nil {
 		return GRPCStatus{}, err
@@ -86,8 +83,6 @@ func AcceptTOS(ctx context.Context, t *Transport, token string) (GRPCStatus, err
 
 // SetNSFW toggles always_show_nsfw_content via gRPC-Web.
 func SetNSFW(ctx context.Context, t *Transport, token string, enabled bool) (GRPCStatus, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("nsfw.timeout", 30)
 	label := "enable_nsfw"
 	if !enabled {
 		label = "disable_nsfw"
@@ -96,7 +91,7 @@ func SetNSFW(ctx context.Context, t *Transport, token string, enabled bool) (GRP
 		BuildNSFWMgmtPayload(enabled),
 		WithOrigin(Base),
 		WithReferer(Base+"/?_s=data"),
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("nsfw.timeout", 30)),
 	)
 	if err != nil {
 		return GRPCStatus{}, err
@@ -123,8 +118,6 @@ func DisableNSFW(ctx context.Context, t *Transport, token string) (GRPCStatus, e
 
 // SetBirthDate posts a random adult birth date for *token* via REST.
 func SetBirthDate(ctx context.Context, t *Transport, token string) (map[string]any, error) {
-	cfg := config.Global()
-	timeoutS := cfg.GetInt("nsfw.timeout", 30)
 	payload := BuildSetBirthPayload()
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -133,7 +126,7 @@ func SetBirthDate(ctx context.Context, t *Transport, token string) (map[string]a
 	return t.PostJSON(ctx, SetBirthURL, token, body,
 		WithOrigin(Base),
 		WithReferer(Base+"/?_s=data"),
-		WithTimeout(time.Duration(timeoutS)*time.Second),
+		WithTimeout(configuredGrokOperationTimeout("nsfw.timeout", 30)),
 	)
 }
 
