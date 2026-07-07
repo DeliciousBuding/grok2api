@@ -126,7 +126,7 @@ On upstream failure (429, 401, 503), the gateway automatically retries with a di
 
 #### Admission Control
 
-When `admission.global_max_inflight` or `admission.per_model_max_inflight` is exhausted, the gateway rejects the request with HTTP 429 before selecting an upstream account.
+When `admission.global_max_inflight` or `admission.per_model_max_inflight` is exhausted, the gateway rejects the request with HTTP 429 before selecting an upstream account. `0` disables each limiter; positive values above `10000` are clamped to `10000`.
 
 ```json
 {

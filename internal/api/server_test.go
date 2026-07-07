@@ -26,6 +26,26 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
+func preAcquireAdmission(t *testing.T, server *Server, scope string, limit int) []func() {
+	t.Helper()
+	releases := make([]func(), 0, limit)
+	for i := 0; i < limit; i++ {
+		release, ok := server.Admission.TryAcquire(scope, limit)
+		if !ok {
+			releaseAll(releases)
+			t.Fatalf("pre-acquire %s slot %d/%d should pass", scope, i+1, limit)
+		}
+		releases = append(releases, release)
+	}
+	return releases
+}
+
+func releaseAll(releases []func()) {
+	for i := len(releases) - 1; i >= 0; i-- {
+		releases[i]()
+	}
+}
+
 func TestRequestSizeMiddlewareRejectsOversizedBody(t *testing.T) {
 	t.Setenv("GROK_APP_API_KEY", "")
 	loadTestConfig(t, "[server]\nmax_body_bytes = 8\n")
@@ -335,6 +355,27 @@ func TestGlobalAdmissionRejectsBeforeBodyParsing(t *testing.T) {
 	}
 }
 
+func TestGlobalAdmissionClampsMisconfiguredLimit(t *testing.T) {
+	loadTestConfig(t, fmt.Sprintf("[admission]\nglobal_max_inflight = %d\n", admissionMaxInflight+1))
+	server := NewServer(nil, nil, nil, nil, nil)
+	releases := preAcquireAdmission(t, server, "global", admissionMaxInflight)
+	defer releaseAll(releases)
+
+	r := server.Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{`))
+	req.Header.Set("Content-Type", "application/json")
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 from clamped admission limit, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "admission_control_exhausted") {
+		t.Fatalf("expected structured admission error, got %s", w.Body.String())
+	}
+}
+
 func TestModelAdmissionRejectsBeforeAccountSelection(t *testing.T) {
 	loadTestConfig(t, "[admission]\nper_model_max_inflight = 1\n")
 	server := NewServer(nil, nil, nil, nil, nil)
@@ -353,6 +394,27 @@ func TestModelAdmissionRejectsBeforeAccountSelection(t *testing.T) {
 
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("expected 429, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "model:grok-4.20-fast") {
+		t.Fatalf("expected model admission scope in response, got %s", w.Body.String())
+	}
+}
+
+func TestModelAdmissionClampsMisconfiguredLimit(t *testing.T) {
+	loadTestConfig(t, fmt.Sprintf("[admission]\nper_model_max_inflight = %d\n", admissionMaxInflight+1))
+	server := NewServer(nil, nil, nil, nil, nil)
+	releases := preAcquireAdmission(t, server, "model:grok-4.20-fast", admissionMaxInflight)
+	defer releaseAll(releases)
+
+	r := server.Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hi"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 from clamped model admission limit, got %d body=%s", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), "model:grok-4.20-fast") {
 		t.Fatalf("expected model admission scope in response, got %s", w.Body.String())

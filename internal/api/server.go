@@ -77,7 +77,10 @@ func NewServer(repo account.Repository, dir *account.Directory, refresh *account
 	}
 }
 
-const adminBackgroundConcurrency = 2
+const (
+	adminBackgroundConcurrency = 2
+	admissionMaxInflight       = 10000
+)
 
 func (s *Server) tryStartAdminBackgroundTask(timeout time.Duration, work func(context.Context)) bool {
 	if work == nil {
@@ -332,7 +335,7 @@ func (s *Server) globalAdmissionMiddleware() gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		limit := config.Global().GetInt("admission.global_max_inflight", 0)
+		limit := configuredAdmissionLimit("admission.global_max_inflight")
 		release, ok := s.Admission.TryAcquire("global", limit)
 		if !ok {
 			writeAdmissionRejected(c, "global")
@@ -347,7 +350,7 @@ func (s *Server) acquireModelAdmission(c *gin.Context, modelName string) (func()
 	if s.Admission == nil {
 		return func() {}, true
 	}
-	limit := config.Global().GetInt("admission.per_model_max_inflight", 0)
+	limit := configuredAdmissionLimit("admission.per_model_max_inflight")
 	scope := "model:" + modelName
 	release, ok := s.Admission.TryAcquire(scope, limit)
 	if !ok {
@@ -355,6 +358,17 @@ func (s *Server) acquireModelAdmission(c *gin.Context, modelName string) (func()
 		return nil, false
 	}
 	return release, true
+}
+
+func configuredAdmissionLimit(key string) int {
+	limit := config.Global().GetInt(key, 0)
+	if limit <= 0 {
+		return 0
+	}
+	if limit > admissionMaxInflight {
+		return admissionMaxInflight
+	}
+	return limit
 }
 
 func writeAdmissionRejected(c *gin.Context, scope string) {
