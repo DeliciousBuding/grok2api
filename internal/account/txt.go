@@ -127,6 +127,9 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.validatePatchTagsLocked(normalized); err != nil {
+		return nil, err
+	}
 	r.revision++
 	rev := r.revision
 	now := platform.NowMs()
@@ -146,11 +149,10 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 		if p.Status != nil {
 			rec.Status = *p.Status
 		}
-		if p.Tags != nil {
-			rec.Tags = p.Tags
-		}
-		if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
-			rec.Tags = MergeTags(rec.Tags, p.AddTags, p.RemoveTags)
+		if tags, ok, err := patchTags(rec.Tags, p); err != nil {
+			return nil, err
+		} else if ok {
+			rec.Tags = tags
 		}
 		if p.QuotaAuto != nil {
 			rec.Quota["auto"] = *p.QuotaAuto
@@ -228,6 +230,32 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 		return nil, err
 	}
 	return &MutationResult{Patched: patched, Revision: rev}, nil
+}
+
+func (r *TxtRepository) validatePatchTagsLocked(patches []Patch) error {
+	scratch := map[string][]string{}
+	for _, p := range patches {
+		tok := p.Token
+		if tok == "" {
+			continue
+		}
+		current, ok := scratch[tok]
+		if !ok {
+			rec, exists := r.accounts[tok]
+			if !exists || rec.IsDeleted() {
+				continue
+			}
+			current = rec.Tags
+		}
+		next, changed, err := patchTags(current, p)
+		if err != nil {
+			return err
+		}
+		if changed {
+			scratch[tok] = next
+		}
+	}
+	return nil
 }
 
 func (r *TxtRepository) DeleteAccounts(ctx context.Context, tokens []string) (*MutationResult, error) {

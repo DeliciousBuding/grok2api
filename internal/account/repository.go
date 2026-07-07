@@ -108,8 +108,40 @@ func normalizePatches(patches []Patch) ([]Patch, error) {
 			}
 			out[i].Tags = tags
 		}
+		if len(out[i].AddTags) > 0 {
+			tags, err := NormalizeAccountTags(out[i].AddTags)
+			if err != nil {
+				return nil, err
+			}
+			out[i].AddTags = tags
+		}
+		if len(out[i].RemoveTags) > 0 {
+			tags, err := NormalizeAccountTags(out[i].RemoveTags)
+			if err != nil {
+				return nil, err
+			}
+			out[i].RemoveTags = tags
+		}
 	}
 	return out, nil
+}
+
+func patchTags(current []string, p Patch) ([]string, bool, error) {
+	if p.Tags == nil && len(p.AddTags) == 0 && len(p.RemoveTags) == 0 {
+		return current, false, nil
+	}
+	tags := current
+	if p.Tags != nil {
+		tags = p.Tags
+	}
+	if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
+		tags = MergeTags(tags, p.AddTags, p.RemoveTags)
+	}
+	tags, err := NormalizeAccountTags(tags)
+	if err != nil {
+		return nil, false, err
+	}
+	return tags, true, nil
 }
 
 // Patch mutates an existing account (only set fields are applied).

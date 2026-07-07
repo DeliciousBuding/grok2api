@@ -168,7 +168,9 @@ func (r *SQLiteRepository) PatchAccounts(ctx context.Context, patches []Patch) (
 		if rec == nil || rec.IsDeleted() {
 			continue
 		}
-		applyPatchToRecord(rec, p, now, rev)
+		if err := applyPatchToRecord(rec, p, now, rev); err != nil {
+			return nil, err
+		}
 		if err := sqliteWriteRecord(ctx, tx, rec); err != nil {
 			return nil, err
 		}
@@ -539,7 +541,7 @@ func normalizeRecord(rec *Record) {
 	}
 }
 
-func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) {
+func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) error {
 	normalizeRecord(rec)
 	if p.Pool != nil {
 		rec.Pool = *p.Pool
@@ -547,11 +549,10 @@ func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) {
 	if p.Status != nil {
 		rec.Status = *p.Status
 	}
-	if p.Tags != nil {
-		rec.Tags = p.Tags
-	}
-	if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
-		rec.Tags = MergeTags(rec.Tags, p.AddTags, p.RemoveTags)
+	if tags, ok, err := patchTags(rec.Tags, p); err != nil {
+		return err
+	} else if ok {
+		rec.Tags = tags
 	}
 	if p.QuotaAuto != nil {
 		rec.Quota["auto"] = *p.QuotaAuto
@@ -623,6 +624,7 @@ func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) {
 	}
 	rec.UpdatedAt = now
 	rec.Revision = rev
+	return nil
 }
 
 func pageRecords(records []*Record, q ListQuery, revision int) *Page {

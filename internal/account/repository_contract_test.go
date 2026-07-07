@@ -164,6 +164,40 @@ func TestRepositoryRejectsInvalidTagsBeforePersisting(t *testing.T) {
 			if len(recs) != 1 || len(recs[0].Tags) != 1 || recs[0].Tags[0] != "stable" {
 				t.Fatalf("failed patch should preserve existing tags, got %#v", recs)
 			}
+
+			baseTags := make([]string, 10)
+			for i := range baseTags {
+				baseTags[i] = "tag-" + string(rune('a'+i))
+			}
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-many-patch-tags", Tags: baseTags}}); err != nil {
+				t.Fatalf("seed max tag account: %v", err)
+			}
+			if _, err := repo.PatchAccounts(ctx, []Patch{{Token: "tok-many-patch-tags", AddTags: []string{"tag-extra"}}}); err == nil || !strings.Contains(err.Error(), "too_many_tags") {
+				t.Fatalf("expected too_many_tags from patch add_tags, got %v", err)
+			}
+			recs, err = repo.GetAccounts(ctx, []string{"tok-many-patch-tags"})
+			if err != nil {
+				t.Fatalf("get account after failed add_tags: %v", err)
+			}
+			if len(recs) != 1 || len(recs[0].Tags) != len(baseTags) {
+				t.Fatalf("failed add_tags should preserve existing tags, got %#v", recs)
+			}
+			for i, tag := range recs[0].Tags {
+				if tag != baseTags[i] {
+					t.Fatalf("failed add_tags should preserve existing tags, got %#v", recs[0].Tags)
+				}
+			}
+
+			if _, err := repo.PatchAccounts(ctx, []Patch{{Token: "tok-many-patch-tags", RemoveTags: []string{longTag}}}); err == nil || !strings.Contains(err.Error(), "tag_too_long") {
+				t.Fatalf("expected tag_too_long from patch remove_tags, got %v", err)
+			}
+			recs, err = repo.GetAccounts(ctx, []string{"tok-many-patch-tags"})
+			if err != nil {
+				t.Fatalf("get account after failed remove_tags: %v", err)
+			}
+			if len(recs) != 1 || len(recs[0].Tags) != len(baseTags) {
+				t.Fatalf("failed remove_tags should preserve existing tags, got %#v", recs)
+			}
 		})
 	}
 }
