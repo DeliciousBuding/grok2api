@@ -201,3 +201,67 @@ func TestRepositoryRejectsInvalidTagsBeforePersisting(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryBoundsPersistentReasonFields(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		repo func(*testing.T) Repository
+	}{
+		{
+			name: "txt",
+			repo: func(t *testing.T) Repository {
+				return NewTxtRepository(filepath.Join(t.TempDir(), "accounts.jsonl"))
+			},
+		},
+		{
+			name: "sqlite",
+			repo: func(t *testing.T) Repository {
+				return NewSQLiteRepository(filepath.Join(t.TempDir(), "accounts.sqlite3"))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := tc.repo(t)
+			if err := repo.Initialize(ctx); err != nil {
+				t.Fatalf("initialize repo: %v", err)
+			}
+			t.Cleanup(func() { _ = repo.Close(ctx) })
+
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-reason"}}); err != nil {
+				t.Fatalf("seed account: %v", err)
+			}
+
+			longReason := "failure:" + strings.Repeat("x", MaxReasonLength+128) + ":tail"
+			statusReason := "state:" + strings.Repeat("y", MaxReasonLength+128) + ":tail"
+			status := StatusCooling
+			if _, err := repo.PatchAccounts(ctx, []Patch{
+				{
+					Token:          "tok-reason",
+					Status:         &status,
+					LastFailReason: &longReason,
+					StateReason:    &statusReason,
+				},
+			}); err != nil {
+				t.Fatalf("patch oversized reasons: %v", err)
+			}
+
+			recs, err := repo.GetAccounts(ctx, []string{"tok-reason"})
+			if err != nil {
+				t.Fatalf("get account: %v", err)
+			}
+			if len(recs) != 1 {
+				t.Fatalf("expected one account, got %d", len(recs))
+			}
+			if recs[0].LastFailReason == nil || len(*recs[0].LastFailReason) != MaxReasonLength {
+				t.Fatalf("last_fail_reason should be capped to %d chars, got %#v", MaxReasonLength, recs[0].LastFailReason)
+			}
+			if recs[0].StateReason == nil || len(*recs[0].StateReason) != MaxReasonLength {
+				t.Fatalf("state_reason should be capped to %d chars, got %#v", MaxReasonLength, recs[0].StateReason)
+			}
+			if strings.Contains(*recs[0].LastFailReason, ":tail") || strings.Contains(*recs[0].StateReason, ":tail") {
+				t.Fatalf("bounded reasons should not persist oversized tail data: %#v %#v", recs[0].LastFailReason, recs[0].StateReason)
+			}
+		})
+	}
+}

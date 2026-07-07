@@ -18,9 +18,10 @@ type Upsert struct {
 }
 
 const (
-	MaxTokenLength = 4096
-	MaxTags        = 10
-	MaxTagLength   = 64
+	MaxTokenLength  = 4096
+	MaxTags         = 10
+	MaxTagLength    = 64
+	MaxReasonLength = 512
 )
 
 var ErrTokenTooLong = errors.New("token_too_long: account token exceeds maximum length")
@@ -56,6 +57,16 @@ func NormalizeAccountTags(raw []string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+func NormalizeAccountReason(raw string) string {
+	reason := strings.TrimSpace(raw)
+	reason = strings.ReplaceAll(reason, "\r", " ")
+	reason = strings.ReplaceAll(reason, "\n", " ")
+	if len(reason) > MaxReasonLength {
+		reason = reason[:MaxReasonLength]
+	}
+	return reason
 }
 
 func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
@@ -121,6 +132,14 @@ func normalizePatches(patches []Patch) ([]Patch, error) {
 				return nil, err
 			}
 			out[i].RemoveTags = tags
+		}
+		if out[i].LastFailReason != nil {
+			reason := NormalizeAccountReason(*out[i].LastFailReason)
+			out[i].LastFailReason = &reason
+		}
+		if out[i].StateReason != nil {
+			reason := NormalizeAccountReason(*out[i].StateReason)
+			out[i].StateReason = &reason
 		}
 	}
 	return out, nil
