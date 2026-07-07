@@ -888,6 +888,64 @@ func TestAdminTokenMutationsRejectInvalidTagsBeforeWork(t *testing.T) {
 	}
 }
 
+func TestChatCompletionsRejectInvalidPreferTagsBeforeRouting(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name string
+		tags string
+		code string
+	}{
+		{
+			name: "too many tags",
+			tags: tagListJSON(adminMaxTags+1, 8),
+			code: "too_many_tags",
+		},
+		{
+			name: "tag too long",
+			tags: `["` + strings.Repeat("x", adminMaxTagLength+1) + `"]`,
+			code: "tag_too_long",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"grok2api_prefer_tags":` + tc.tags + `}`
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestResponsesRejectInvalidPreferTagsBeforeRouting(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	body := `{"model":"grok-4.3-console","input":"hello","grok2api_prefer_tags":` + tagListJSON(adminMaxTags+1, 8) + `}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "too_many_tags") {
+		t.Fatalf("expected too_many_tags error, got %s", w.Body.String())
+	}
+}
+
 func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
 	started := make(chan struct{}, len(tokens))

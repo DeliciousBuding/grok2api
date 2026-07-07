@@ -60,10 +60,26 @@ func (r *chatCompletionRequest) preferTags() []string {
 	return account.SortTags(append([]string(nil), r.Grok2APIPreferTags...))
 }
 
+func (r *chatCompletionRequest) validatePreferTags() error {
+	if r == nil {
+		return nil
+	}
+	tags, err := sanitizeAccountTags(r.Grok2APIPreferTags)
+	if err != nil {
+		return err
+	}
+	r.Grok2APIPreferTags = tags
+	return nil
+}
+
 // handleChatCompletions dispatches by capability.
 func (s *Server) handleChatCompletions(c *gin.Context) {
 	var req chatCompletionRequest
 	if err := readJSON(c, &req); err != nil {
+		writeAppError(c, err)
+		return
+	}
+	if err := req.validatePreferTags(); err != nil {
 		writeAppError(c, err)
 		return
 	}

@@ -215,6 +215,12 @@ func (s *Server) handleResponses(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
+	preferTags, err := sanitizeAccountTags(req.Grok2APIPreferTags)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
+	req.Grok2APIPreferTags = preferTags
 	spec, ok := model.Resolve(req.Model)
 	if !ok {
 		writeAppError(c, platform.ValidationErrorCode("Model '"+req.Model+"' not found", "model", "model_not_found"))

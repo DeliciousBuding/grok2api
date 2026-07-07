@@ -393,7 +393,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 				continue
 			}
 			seen[token] = true
-			cleanTags, err := sanitizeAdminTags(tags)
+			cleanTags, err := sanitizeAccountTags(tags)
 			if err != nil {
 				writeAppError(c, err)
 				return
@@ -455,7 +455,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tags, err := sanitizeAdminTags(body.Tags)
+	tags, err := sanitizeAccountTags(body.Tags)
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -833,7 +833,7 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tags, err := sanitizeAdminTags(body.Tags)
+	tags, err := sanitizeAccountTags(body.Tags)
 	if err != nil {
 		writeAppError(c, err)
 		return
@@ -1662,7 +1662,7 @@ func ensureAdminTokenMutationLimit(n int) error {
 	return nil
 }
 
-func sanitizeAdminTags(raw []string) ([]string, error) {
+func sanitizeAccountTags(raw []string) ([]string, error) {
 	seen := map[string]bool{}
 	for _, tag := range raw {
 		tag = strings.TrimSpace(tag)

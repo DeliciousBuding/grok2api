@@ -1,4 +1,4 @@
-最后更新：2026-07-07 11:15
+最后更新：2026-07-07 11:28
 
 # Operations Runbook
 
@@ -163,7 +163,7 @@ Admin batch endpoints use fixed worker pools bounded by the `concurrency` query 
 
 Admin token mutation endpoints also reject requests above 1000 unique valid tokens with `too_many_tokens` before storage or background refresh work starts. Split larger imports, deletes, disabled-state batches, and pool replacements into smaller requests.
 
-Admin account tags are trimmed, deduplicated, sorted, and bounded to 10 unique non-empty tags per account with each tag at most 64 characters. Invalid tag metadata is rejected with `too_many_tags` or `tag_too_long` before storage or background refresh work starts.
+Admin account tags and request-level `grok2api_prefer_tags` are trimmed, deduplicated, sorted, and bounded to 10 unique non-empty tags with each tag at most 64 characters. Invalid tag metadata is rejected with `too_many_tags` or `tag_too_long` before storage, background refresh, or account routing work starts.
 
 Admin cache multi-delete rejects requests above 1000 non-empty file names with `too_many_file_names`. This keeps one admin request from allocating or iterating over an unbounded cache-deletion list.
 

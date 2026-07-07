@@ -51,7 +51,7 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
 | `tool_choice` | any | — | Tool selection strategy |
 | `image_config` | object | — | Image generation options (`n`, `size`, `response_format`) when using an image model |
 | `video_config` | object | — | Video generation options (`seconds`, `size`) when using a video model |
-| `grok2api_prefer_tags` | string array | — | grok2api extension: prefer accounts that contain all listed tags; if no available account matches, selection falls back to the normal strategy |
+| `grok2api_prefer_tags` | string array | — | grok2api extension: prefer accounts that contain all listed tags; if no available account matches, selection falls back to the normal strategy. Limited to 10 tags, 64 characters each |
 
 #### Account Tag Preference
 
@@ -59,7 +59,7 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
 
 The selector requires an account to contain all requested tags. Matching accounts are preferred inside the requested pool and mode; within that preferred set, the configured selection strategy still applies. If no eligible account has all tags, the request falls back to the normal untagged candidate set instead of failing.
 
-Account tags written through admin token APIs are trimmed, deduplicated, sorted, and bounded to 10 tags per account with each tag at most 64 characters. Oversized tag sets return `too_many_tags`; oversized tag values return `tag_too_long`.
+Account tags written through admin token APIs and request-level `grok2api_prefer_tags` are trimmed, deduplicated, sorted, and bounded to 10 tags with each tag at most 64 characters. Oversized tag sets return `too_many_tags`; oversized tag values return `tag_too_long`.
 
 #### Messages with Images
 
@@ -169,7 +169,7 @@ OpenAI Responses API format. Console models route to console.x.ai; others go thr
 | `top_p` | float | Nucleus sampling |
 | `tools` | array | Tool definitions |
 | `tool_choice` | any | Tool selection |
-| `grok2api_prefer_tags` | string array | grok2api extension: soft account tag preference, same semantics as `/v1/chat/completions` |
+| `grok2api_prefer_tags` | string array | grok2api extension: soft account tag preference, same semantics and 10-tag / 64-character limits as `/v1/chat/completions` |
 
 ---
 
