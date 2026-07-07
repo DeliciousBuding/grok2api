@@ -10,11 +10,16 @@
 //
 // KEY FINDING (verified live): grok does NOT require the statsig's seed to match
 // the seed in the current page's <meta>. It only checks internal self-consistency
-// (HEX == f(embedded seed)). So ONE genuine (seed, HEX) pair — captured once from
-// a real browser — generates unlimited valid statsigs with fresh timestamps.
-// A stale genuine pair + a fresh timestamp was accepted (code:8 quota, i.e. it
-// passed the anti-bot gate); only the embedded pair's internal consistency
-// matters, not its age or the page it came from.
+// (HEX == f(embedded seed)). At startup we generate a random 48-byte seed and
+// compute its HEX via the in-Go reverse of grok's statsig algorithm
+// (svgfingerprint.ComputeHEXForSeed). The pair is internally consistent and
+// produces unlimited valid statsigs with fresh timestamps. No browser-captured
+// pair is required.
+//
+// Runtime can:
+//   - use the auto-generated pair (default, no setup needed)
+//   - override via statsig.SetPair from config (e.g. browser-captured pair)
+//   - rotate via statsig.RotatePair (mint a fresh random pair)
 //
 // Reversed algorithm (pure-Go reproduction verified BYTE-EXACT vs grok's own JS,
 // 70/70, against a live browser sY() capture):
@@ -41,6 +46,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/DeliciousBuding/grok2api/internal/grok/statsig/svgfingerprint"
 )
 
 const (
@@ -49,21 +56,38 @@ const (
 	statsigMark  = 0x03              // tail[20] constant marker
 )
 
-// Genuine (seed, HEX) pair captured from a live grok.com browser session and
-// verified accepted by grok (passed the anti-bot gate). HEX == f(seed), so this
-// pair is internally consistent and accepted regardless of the page seed.
-const (
-	defaultSeedB64 = "Ri4L/GX6aGftT2X7L9NzsXcwBuPF9iI0F+mRuYxPG9dXpHlMPNp6BY8FPaSsoYVS"
-	defaultHEX     = "ff97d50e8f5c28f5c28f8068f5c28f5c28f4068f5c28f5c28f40e8f5c28f5c28f800"
-)
-
 // pair holds the active (seed, HEX). Guarded by mu so it can be refreshed at
-// runtime (e.g. from config) without races.
+// runtime (e.g. from config) without races. It is initialised lazily through
+// init so svgfingerprint tables are ready before HEX is computed.
 var (
 	mu      sync.RWMutex
-	curSeed []byte = mustDecodeSeed(defaultSeedB64)
-	curHEX  string = defaultHEX
+	curSeed []byte
+	curHEX  string
 )
+
+func init() {
+	seed := freshSeed()
+	mu.Lock()
+	curSeed = seed
+	curHEX = freshHEX(seed)
+	mu.Unlock()
+}
+
+func freshSeed() []byte {
+	b := make([]byte, 48)
+	if _, err := rand.Read(b); err != nil {
+		panic("statsig: crypto/rand failed: " + err.Error())
+	}
+	return b
+}
+
+func freshHEX(seed []byte) string {
+	hex, err := svgfingerprint.ComputeHEXForSeed(seed)
+	if err != nil {
+		panic("statsig: fresh HEX failed: " + err.Error())
+	}
+	return hex
+}
 
 // SetPair overrides the (seed, HEX) pair, e.g. from a freshly captured value in
 // config. seedB64 must decode to 48 bytes; both must be a GENUINE matched pair
@@ -83,6 +107,15 @@ func SetPair(seedB64, hex string) error {
 	curSeed, curHEX = s, hex
 	mu.Unlock()
 	return nil
+}
+
+// RotatePair mints a new random internally consistent (seed, HEX) pair.
+func RotatePair() {
+	seed := freshSeed()
+	mu.Lock()
+	curSeed = seed
+	curHEX = freshHEX(seed)
+	mu.Unlock()
 }
 
 // Generate returns a fresh x-statsig-id for the request (pathname, method),
@@ -105,7 +138,7 @@ func build(seed []byte, hex, pathname, method string, nowUnix int64) (string, er
 
 func buildWithKey(seed []byte, hex, pathname, method string, nowUnix int64, key byte) (string, error) {
 	if len(seed) != 48 {
-		return "", errors.New("statsig: seed must be 48 bytes")
+		return "", errors.New("statsig: seed must decode to 48 bytes")
 	}
 	number := uint32(nowUnix - statsigEpoch)
 
