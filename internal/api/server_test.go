@@ -63,6 +63,58 @@ func TestRequestSizeMiddlewareReportsChunkedOversizedJSONAs413(t *testing.T) {
 	}
 }
 
+func TestRequestSizeMiddlewareAppliesDefaultJSONLimit(t *testing.T) {
+	loadTestConfig(t, "")
+
+	r := NewServer(nil, nil, nil, nil, nil).Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(strings.Repeat("x", defaultNonMultipartMaxBodyBytes+1)))
+	req.Header.Set("Content-Type", "application/json")
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "request_body_too_large") {
+		t.Fatalf("expected request_body_too_large code, got %s", w.Body.String())
+	}
+}
+
+func TestRequestSizeMiddlewareAppliesDefaultLimitWithoutContentType(t *testing.T) {
+	loadTestConfig(t, "")
+
+	r := NewServer(nil, nil, nil, nil, nil).Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(strings.Repeat("x", defaultNonMultipartMaxBodyBytes+1)))
+
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestRequestSizeMiddlewareDefaultJSONLimitDoesNotCapMultipart(t *testing.T) {
+	loadTestConfig(t, "")
+
+	largePrompt := strings.Repeat("x", defaultNonMultipartMaxBodyBytes+1)
+	body, contentType := makeMultipartBody(t, map[string]string{
+		"model":  "missing-model",
+		"prompt": largePrompt,
+	})
+	r := NewServer(nil, nil, nil, nil, nil).Router()
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/edits", body)
+	req.Header.Set("Content-Type", contentType)
+
+	r.ServeHTTP(w, req)
+
+	if w.Code == http.StatusRequestEntityTooLarge {
+		t.Fatalf("default JSON limit should not cap multipart body: %s", w.Body.String())
+	}
+}
+
 func TestAdminStorageEndpointReportsRepositoryBackend(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 

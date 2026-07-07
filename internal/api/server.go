@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -195,6 +196,8 @@ func configReloadMiddleware() gin.HandlerFunc {
 
 const requestConfigReloadMinInterval = 500 * time.Millisecond
 
+const defaultNonMultipartMaxBodyBytes = 10 << 20
+
 // --- shared helpers ---
 
 func writeJSON(c *gin.Context, status int, v any) {
@@ -253,7 +256,7 @@ func corsMiddleware() gin.HandlerFunc {
 
 func requestSizeMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		limit := config.Global().GetInt("server.max_body_bytes", 0)
+		limit := requestBodyLimit(c)
 		if limit > 0 {
 			if c.Request.ContentLength > int64(limit) {
 				c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{
@@ -269,6 +272,37 @@ func requestSizeMiddleware() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func requestBodyLimit(c *gin.Context) int {
+	limit := config.Global().GetInt("server.max_body_bytes", 0)
+	if limit > 0 {
+		return limit
+	}
+	if c == nil || c.Request == nil || c.Request.Body == nil {
+		return 0
+	}
+	if !usesDefaultBodyLimit(c.Request) {
+		return 0
+	}
+	return defaultNonMultipartMaxBodyBytes
+}
+
+func usesDefaultBodyLimit(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+	default:
+		return false
+	}
+	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		return true
+	}
+	mediaType = strings.ToLower(mediaType)
+	return mediaType != "multipart/form-data"
 }
 
 func (s *Server) metricsMiddleware() gin.HandlerFunc {

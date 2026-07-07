@@ -129,7 +129,7 @@ max_response_bytes = 16777216
 
 Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
 
-`server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked JSON bodies. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
+`server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked bodies. When it is `0`, non-multipart write requests still use a built-in 10MiB default limit; multipart media endpoints keep their existing multipart and per-file limits. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `server.read_header_timeout_sec`, `server.read_timeout_sec`, `server.write_timeout_sec`, and `server.idle_timeout_sec` tune the public HTTP server's connection-level deadlines. Keep `server.write_timeout_sec = 0` for long streaming deployments unless an outer proxy enforces stream-safe write deadlines. `server.shutdown_timeout_sec` bounds graceful shutdown after SIGINT/SIGTERM. `server.max_header_bytes` bounds aggregate request-header memory before routing or authentication.
 
