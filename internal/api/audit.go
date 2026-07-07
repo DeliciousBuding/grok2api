@@ -15,7 +15,10 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
-const adminAuditContextKey = "admin_audit_event"
+const (
+	adminAuditContextKey  = "admin_audit_event"
+	adminAuditMaxTokenIDs = 32
+)
 
 // AdminAuditEvent is the sanitized audit record emitted for admin mutations.
 type AdminAuditEvent struct {
@@ -190,7 +193,14 @@ func adminAuditTokenIDs(tokens []string) []string {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	if len(ids) > adminAuditMaxTokenIDs {
+		ids = ids[:adminAuditMaxTokenIDs]
+	}
 	return ids
+}
+
+func adminAuditTokenCount(tokens []string) int {
+	return len(sanitizeTokenList(tokens))
 }
 
 func adminAuditHash(value string) string {

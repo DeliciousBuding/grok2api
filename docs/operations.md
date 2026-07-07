@@ -83,7 +83,7 @@ Expected behavior:
 
 ## Audit Events
 
-Mutating admin requests write one `admin_audit` log event with operation, outcome, method/path/status, counts, pool or media type where relevant, and short non-reversible token identifiers. Audit events are intended for incident review and change tracing; they intentionally omit raw SSO tokens, cookies, Authorization headers, request bodies, local paths, cache file names, tags, and raw asset IDs.
+Mutating admin requests write one `admin_audit` log event with operation, outcome, method/path/status, counts, pool or media type where relevant, and up to 32 short non-reversible token identifier samples. `token_count` keeps the full number of unique valid tokens affected, while `token_ids` is intentionally sampled to keep audit events compact. Audit events are intended for incident review and change tracing; they intentionally omit raw SSO tokens, cookies, Authorization headers, request bodies, local paths, cache file names, tags, and raw asset IDs.
 
 ```bash
 docker compose logs grok2api | grep admin_audit

@@ -2274,6 +2274,43 @@ func TestAdminAuditPoolReplaceOmitsRawTokenPayload(t *testing.T) {
 	}
 }
 
+func TestAdminAuditPoolReplaceBoundsTokenIdentifiers(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	events := []AdminAuditEvent{}
+	server.AdminAudit = AdminAuditFunc(func(event AdminAuditEvent) {
+		events = append(events, event)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPut, "/admin/api/pool", strings.NewReader(tokenMutationBodyJSON(adminMaxBatchTokens, "pool")))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected one audit event, got %#v", events)
+	}
+	event := events[0]
+	if event.TokenCount != adminMaxBatchTokens {
+		t.Fatalf("audit token_count should keep the full mutation size, got %d", event.TokenCount)
+	}
+	if len(event.TokenIDs) > adminAuditMaxTokenIDs {
+		t.Fatalf("audit token_ids should be bounded, got %d identifiers", len(event.TokenIDs))
+	}
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) > 2048 {
+		t.Fatalf("audit event should stay compact, got %d bytes", len(encoded))
+	}
+}
+
 func makeMultipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
 	t.Helper()
 	body := &bytes.Buffer{}

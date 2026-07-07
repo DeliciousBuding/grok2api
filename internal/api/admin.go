@@ -413,7 +413,7 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs(allTokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.replace",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(allTokens),
 		TokenIDs:   tokenIDs,
 		Count:      total,
 		Upserted:   total,
@@ -532,7 +532,7 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		Operation:  "tokens.add",
 		Pool:       pool,
 		State:      state,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(newTokens),
 		TokenIDs:   tokenIDs,
 		Count:      len(upserts),
 		Upserted:   len(upserts),
@@ -565,7 +565,7 @@ func (s *Server) handleTokensDelete(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs(clean)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.delete",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(clean),
 		TokenIDs:   tokenIDs,
 		Deleted:    result.Deleted,
 	})
@@ -603,7 +603,7 @@ func (s *Server) handleTokensDeleteInvalid(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs(tokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.delete_invalid",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(tokens),
 		TokenIDs:   tokenIDs,
 		Deleted:    result.Deleted,
 	})
@@ -674,7 +674,7 @@ func (s *Server) handleTokensEdit(c *gin.Context) {
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.edit",
 		Pool:       pool,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount([]string{old, newTok}),
 		TokenIDs:   tokenIDs,
 		Upserted:   1,
 		Deleted:    deleted,
@@ -716,7 +716,7 @@ func (s *Server) handleTokensToggleDisabled(c *gin.Context) {
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.disabled",
 		State:      state,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount([]string{token}),
 		TokenIDs:   tokenIDs,
 		Patched:    1,
 	})
@@ -765,7 +765,7 @@ func (s *Server) handleTokensToggleDisabledBatch(c *gin.Context) {
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "tokens.disabled_batch",
 		State:      state,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(patchedTokens),
 		TokenIDs:   tokenIDs,
 		Patched:    result.Patched,
 		Failed:     len(patches) - result.Patched,
@@ -834,7 +834,7 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tokenIDs := adminAuditTokenIDs(body.Tokens)
+	tokenIDs := adminAuditTokenIDs(tokens)
 	upserted := len(upserts)
 	if result != nil && result.Upserted > 0 {
 		upserted = result.Upserted
@@ -842,7 +842,7 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "pool.replace",
 		Pool:       pool,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(tokens),
 		TokenIDs:   tokenIDs,
 		Count:      len(upserts),
 		Upserted:   upserted,
@@ -901,7 +901,7 @@ func (s *Server) handleBatchNSFW(c *gin.Context) {
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "batch.nsfw",
 		State:      state,
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(tokens),
 		TokenIDs:   tokenIDs,
 		Count:      successCount,
 		Failed:     failedCount,
@@ -965,7 +965,7 @@ func (s *Server) handleBatchRefresh(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs(tokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "batch.refresh",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(tokens),
 		TokenIDs:   tokenIDs,
 		Count:      refreshedCount,
 		Failed:     failedCount,
@@ -1019,7 +1019,7 @@ func (s *Server) handleBatchCacheClear(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs(tokens)
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "batch.cache_clear",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount(tokens),
 		TokenIDs:   tokenIDs,
 		Deleted:    deletedTotal,
 		Failed:     failedCount,
@@ -1273,7 +1273,7 @@ func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs([]string{token})
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:   "assets.delete_item",
-		TokenCount:  len(tokenIDs),
+		TokenCount:  adminAuditTokenCount([]string{token}),
 		TokenIDs:    tokenIDs,
 		AssetIDHash: adminAuditHash(assetID),
 		Deleted:     1,
@@ -1309,7 +1309,7 @@ func (s *Server) handleAssetsClearToken(c *gin.Context) {
 	tokenIDs := adminAuditTokenIDs([]string{token})
 	setAdminAudit(c, AdminAuditEvent{
 		Operation:  "assets.clear_token",
-		TokenCount: len(tokenIDs),
+		TokenCount: adminAuditTokenCount([]string{token}),
 		TokenIDs:   tokenIDs,
 		Deleted:    deleted,
 	})

@@ -487,7 +487,7 @@ Serve a cached video by file ID. Returns MP4.
 
 All admin endpoints require `app.app_key` authentication via `Authorization: Bearer <app_key>` or `?app_key=<key>`.
 
-Mutating admin endpoints emit an `admin_audit` log event after each request. Events include the operation name, outcome, HTTP method/path/status, counts, pool or media type where relevant, and short non-reversible SHA-256 token identifiers. They do not include raw SSO tokens, cookies, Authorization headers, request bodies, local file paths, cache file names, tags, or raw asset IDs.
+Mutating admin endpoints emit an `admin_audit` log event after each request. Events include the operation name, outcome, HTTP method/path/status, counts, pool or media type where relevant, and up to 32 short non-reversible SHA-256 token identifier samples. `token_count` keeps the full number of unique valid tokens affected. Events do not include raw SSO tokens, cookies, Authorization headers, request bodies, local file paths, cache file names, tags, or raw asset IDs.
 
 ### Config
 
