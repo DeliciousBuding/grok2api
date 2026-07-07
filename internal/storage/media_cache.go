@@ -21,6 +21,11 @@ import (
 // lowWatermarkRatio is the cache target after an eviction sweep (60% of max).
 const lowWatermarkRatio = 0.60
 
+const (
+	maxLocalMediaCacheBytes = int64(1 << 40)
+	maxLocalMediaCacheMB    = maxLocalMediaCacheBytes / (1024 * 1024)
+)
+
 const table = "local_media_files"
 
 var (
@@ -230,8 +235,11 @@ func (s *LocalMediaCacheStore) save(mediaType MediaType, fileID string, raw []by
 func (s *LocalMediaCacheStore) limitBytes(mediaType MediaType) int64 {
 	cfg := config.Global()
 	limitMB := int64(cfg.GetInt("cache.local."+string(mediaType)+"_max_mb", 0))
-	if limitMB < 0 {
-		limitMB = 0
+	if limitMB <= 0 {
+		return 0
+	}
+	if limitMB > maxLocalMediaCacheMB {
+		return maxLocalMediaCacheBytes
 	}
 	return limitMB * 1024 * 1024
 }

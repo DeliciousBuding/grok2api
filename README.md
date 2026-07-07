@@ -243,8 +243,8 @@ auto_chat_mode_fallback = true  # AUTO 模型自动降级到 fast/expert
 custom_instruction = ""         # 全局附加指令（系统提示）
 
 [cache.local]
-image_max_mb = 0                # 图片缓存上限（MB），0 = 不限制
-video_max_mb = 0                # 视频缓存上限（MB），0 = 不限制
+image_max_mb = 0                # 图片缓存上限（MB），0 = 不限制，正数有效上限 1048576
+video_max_mb = 0                # 视频缓存上限（MB），0 = 不限制，正数有效上限 1048576
 
 [proxy.egress]
 proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SOCKS4/5

@@ -110,6 +110,10 @@ per_model_max_inflight = 16
 [account.selection]
 max_inflight = 8
 
+[cache.local]
+image_max_mb = 0
+video_max_mb = 0
+
 [retry]
 max_retries = 1
 
@@ -138,6 +142,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked bodies. When it is `0`, non-multipart write requests still use a built-in 10MiB default limit; multipart media endpoints keep their existing multipart and per-file limits. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `server.read_header_timeout_sec`, `server.read_timeout_sec`, `server.write_timeout_sec`, and `server.idle_timeout_sec` tune the public HTTP server's connection-level deadlines. Keep `server.write_timeout_sec = 0` for long streaming deployments unless an outer proxy enforces stream-safe write deadlines. `server.shutdown_timeout_sec` bounds graceful shutdown after SIGINT/SIGTERM. `server.max_header_bytes` bounds aggregate request-header memory before routing or authentication.
+
+`cache.local.image_max_mb` and `cache.local.video_max_mb` set local media cache budgets in MiB. `0` disables eviction by size; negative values are treated as `0`; positive values are capped at 1048576 MiB before conversion to bytes so an oversized config cannot overflow the eviction budget.
 
 `proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` are optional but must be configured as a pair. Invalid fingerprint config is rejected at startup and by `/admin/api/config` before it is persisted: the seed must base64-decode to 48 bytes, and the HEX value must be hexadecimal and at most 512 characters. Validation errors name the field and rule without echoing the submitted secret-like value.
 

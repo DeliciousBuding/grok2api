@@ -506,6 +506,8 @@ Startup-only keys cannot be changed through `POST /admin/api/config`: `account.s
 
 Grok asset and NSFW maintenance timeouts (`asset.upload_timeout`, `asset.list_timeout`, `asset.delete_timeout`, and `nsfw.timeout`) treat values less than or equal to zero as their built-in defaults and clamp positive values to at most 3600 seconds before creating upstream request contexts.
 
+Local media cache budgets (`cache.local.image_max_mb` and `cache.local.video_max_mb`) use MiB units. `0` disables size-based eviction, negative values are treated as `0`, and positive values are capped at 1048576 MiB before conversion to bytes.
+
 ### Token Management
 
 | Method | Path | Description |
