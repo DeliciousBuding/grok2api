@@ -1,6 +1,11 @@
 package account
 
-import "context"
+import (
+	"context"
+	"errors"
+
+	"github.com/DeliciousBuding/grok2api/internal/platform"
+)
 
 // Upsert is a create-or-replace account command.
 type Upsert struct {
@@ -8,6 +13,48 @@ type Upsert struct {
 	Pool  string
 	Tags  []string
 	Ext   map[string]any
+}
+
+const MaxTokenLength = 4096
+
+var ErrTokenTooLong = errors.New("token_too_long: account token exceeds maximum length")
+
+func NormalizeAccountToken(raw string) (string, error) {
+	token := platform.SanitizeToken(raw)
+	if len(token) > MaxTokenLength {
+		return "", ErrTokenTooLong
+	}
+	return token, nil
+}
+
+func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
+	out := make([]Upsert, 0, len(items))
+	for _, it := range items {
+		tok, err := NormalizeAccountToken(it.Token)
+		if err != nil {
+			return nil, err
+		}
+		if tok == "" {
+			continue
+		}
+		pool := it.Pool
+		if forcedPool != "" {
+			pool = forcedPool
+		} else if _, ok := PoolFromName(pool); !ok {
+			pool = "basic"
+		}
+		ext := it.Ext
+		if ext == nil {
+			ext = map[string]any{}
+		}
+		out = append(out, Upsert{
+			Token: tok,
+			Pool:  pool,
+			Tags:  SortTags(it.Tags),
+			Ext:   ext,
+		})
+	}
+	return out, nil
 }
 
 // Patch mutates an existing account (only set fields are applied).

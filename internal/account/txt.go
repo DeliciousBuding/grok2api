@@ -84,43 +84,34 @@ func (r *TxtRepository) ScanChanges(ctx context.Context, since int, limit int) (
 }
 
 func (r *TxtRepository) UpsertAccounts(ctx context.Context, items []Upsert) (*MutationResult, error) {
+	normalized, err := normalizeUpserts(items, "")
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.revision++
 	rev := r.revision
 	now := platform.NowMs()
 	upserted := 0
-	for _, it := range items {
-		tok := platform.SanitizeToken(it.Token)
-		if tok == "" {
-			continue
-		}
-		pool := it.Pool
-		if _, ok := PoolFromName(pool); !ok {
-			pool = "basic"
-		}
-		tags := SortTags(it.Tags)
-		ext := it.Ext
-		if ext == nil {
-			ext = map[string]any{}
-		}
-		qs := DefaultQuotaSet(pool)
+	for _, it := range normalized {
+		qs := DefaultQuotaSet(it.Pool)
 		rec := &Record{
-			Token:     tok,
-			Pool:      pool,
+			Token:     it.Token,
+			Pool:      it.Pool,
 			Status:    StatusActive,
 			CreatedAt: now,
 			UpdatedAt: now,
-			Tags:      tags,
+			Tags:      it.Tags,
 			Quota:     qs.ToMap(),
-			Ext:       ext,
+			Ext:       it.Ext,
 			Revision:  rev,
 		}
 		// Preserve CreatedAt if record already exists.
-		if old, ok := r.accounts[tok]; ok && old != nil {
+		if old, ok := r.accounts[it.Token]; ok && old != nil {
 			rec.CreatedAt = old.CreatedAt
 		}
-		r.accounts[tok] = rec
+		r.accounts[it.Token] = rec
 		upserted++
 	}
 	if err := r.flush(); err != nil {
@@ -377,6 +368,10 @@ func (r *TxtRepository) ListAccounts(ctx context.Context, q ListQuery) (*Page, e
 }
 
 func (r *TxtRepository) ReplacePool(ctx context.Context, pool string, upserts []Upsert) (*MutationResult, error) {
+	normalized, err := normalizeUpserts(upserts, pool)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.revision++
@@ -391,37 +386,28 @@ func (r *TxtRepository) ReplacePool(ctx context.Context, pool string, upserts []
 		}
 	}
 	// Upsert new records.
-	for _, it := range upserts {
-		tok := platform.SanitizeToken(it.Token)
-		if tok == "" {
-			continue
-		}
-		tags := SortTags(it.Tags)
-		ext := it.Ext
-		if ext == nil {
-			ext = map[string]any{}
-		}
+	for _, it := range normalized {
 		qs := DefaultQuotaSet(pool)
 		rec := &Record{
-			Token:     tok,
+			Token:     it.Token,
 			Pool:      pool,
 			Status:    StatusActive,
 			CreatedAt: now,
 			UpdatedAt: now,
-			Tags:      tags,
+			Tags:      it.Tags,
 			Quota:     qs.ToMap(),
-			Ext:       ext,
+			Ext:       it.Ext,
 			Revision:  rev,
 		}
-		if old, ok := r.accounts[tok]; ok && old != nil {
+		if old, ok := r.accounts[it.Token]; ok && old != nil {
 			rec.CreatedAt = old.CreatedAt
 		}
-		r.accounts[tok] = rec
+		r.accounts[it.Token] = rec
 	}
 	if err := r.flush(); err != nil {
 		return nil, err
 	}
-	return &MutationResult{Upserted: len(upserts), Revision: rev}, nil
+	return &MutationResult{Upserted: len(normalized), Revision: rev}, nil
 }
 
 func (r *TxtRepository) ResetExpiredConsoleWindows(ctx context.Context) (int, error) {

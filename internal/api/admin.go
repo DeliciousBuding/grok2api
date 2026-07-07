@@ -149,7 +149,7 @@ const (
 	adminMaxBatchConcurrency     = 80
 	adminMaxTokenMutationTokens  = 1000
 	adminMaxBatchTokens          = adminMaxTokenMutationTokens
-	adminMaxTokenLength          = 4096
+	adminMaxTokenLength          = account.MaxTokenLength
 	adminMaxTags                 = 10
 	adminMaxTagLength            = 64
 

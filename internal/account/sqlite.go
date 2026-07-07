@@ -97,6 +97,10 @@ func (r *SQLiteRepository) ScanChanges(ctx context.Context, since int, limit int
 }
 
 func (r *SQLiteRepository) UpsertAccounts(ctx context.Context, items []Upsert) (*MutationResult, error) {
+	normalized, err := normalizeUpserts(items, "")
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	tx, rev, err := r.beginMutationLocked(ctx)
@@ -107,32 +111,19 @@ func (r *SQLiteRepository) UpsertAccounts(ctx context.Context, items []Upsert) (
 
 	now := platform.NowMs()
 	upserted := 0
-	for _, it := range items {
-		tok := platform.SanitizeToken(it.Token)
-		if tok == "" {
-			continue
-		}
-		pool := it.Pool
-		if _, ok := PoolFromName(pool); !ok {
-			pool = "basic"
-		}
-		tags := SortTags(it.Tags)
-		ext := it.Ext
-		if ext == nil {
-			ext = map[string]any{}
-		}
+	for _, it := range normalized {
 		rec := &Record{
-			Token:     tok,
-			Pool:      pool,
+			Token:     it.Token,
+			Pool:      it.Pool,
 			Status:    StatusActive,
 			CreatedAt: now,
 			UpdatedAt: now,
-			Tags:      tags,
-			Quota:     DefaultQuotaSet(pool).ToMap(),
-			Ext:       ext,
+			Tags:      it.Tags,
+			Quota:     DefaultQuotaSet(it.Pool).ToMap(),
+			Ext:       it.Ext,
 			Revision:  rev,
 		}
-		old, err := sqliteRecordByToken(ctx, tx, tok)
+		old, err := sqliteRecordByToken(ctx, tx, it.Token)
 		if err != nil {
 			return nil, err
 		}
@@ -261,6 +252,10 @@ func (r *SQLiteRepository) ListAccounts(ctx context.Context, q ListQuery) (*Page
 }
 
 func (r *SQLiteRepository) ReplacePool(ctx context.Context, pool string, upserts []Upsert) (*MutationResult, error) {
+	normalized, err := normalizeUpserts(upserts, pool)
+	if err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	tx, rev, err := r.beginMutationLocked(ctx)
@@ -286,28 +281,19 @@ func (r *SQLiteRepository) ReplacePool(ctx context.Context, pool string, upserts
 			return nil, err
 		}
 	}
-	for _, it := range upserts {
-		tok := platform.SanitizeToken(it.Token)
-		if tok == "" {
-			continue
-		}
-		tags := SortTags(it.Tags)
-		ext := it.Ext
-		if ext == nil {
-			ext = map[string]any{}
-		}
+	for _, it := range normalized {
 		rec := &Record{
-			Token:     tok,
+			Token:     it.Token,
 			Pool:      pool,
 			Status:    StatusActive,
 			CreatedAt: now,
 			UpdatedAt: now,
-			Tags:      tags,
+			Tags:      it.Tags,
 			Quota:     DefaultQuotaSet(pool).ToMap(),
-			Ext:       ext,
+			Ext:       it.Ext,
 			Revision:  rev,
 		}
-		old, err := sqliteRecordByToken(ctx, tx, tok)
+		old, err := sqliteRecordByToken(ctx, tx, it.Token)
 		if err != nil {
 			return nil, err
 		}
@@ -321,7 +307,7 @@ func (r *SQLiteRepository) ReplacePool(ctx context.Context, pool string, upserts
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
-	return &MutationResult{Upserted: len(upserts), Revision: rev}, nil
+	return &MutationResult{Upserted: len(normalized), Revision: rev}, nil
 }
 
 func (r *SQLiteRepository) ResetExpiredConsoleWindows(ctx context.Context) (int, error) {
