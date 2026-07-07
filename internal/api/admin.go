@@ -149,6 +149,7 @@ const (
 	adminMaxBatchConcurrency     = 80
 	adminMaxTokenMutationTokens  = 1000
 	adminMaxBatchTokens          = adminMaxTokenMutationTokens
+	adminMaxTokenLength          = 4096
 	adminMaxTags                 = 10
 	adminMaxTagLength            = 64
 
@@ -392,7 +393,11 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 					}
 				}
 			}
-			token = platform.SanitizeToken(token)
+			token, err := sanitizeAdminToken(token)
+			if err != nil {
+				writeAppError(c, err)
+				return
+			}
 			if token == "" || seen[token] {
 				continue
 			}
@@ -635,8 +640,16 @@ func (s *Server) handleTokensEdit(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	old := platform.SanitizeToken(body.OldToken)
-	newTok := platform.SanitizeToken(body.Token)
+	old, err := sanitizeAdminToken(body.OldToken)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
+	newTok, err := sanitizeAdminToken(body.Token)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	pool := body.Pool
 	if pool == "" {
 		pool = "basic"
@@ -706,7 +719,11 @@ func (s *Server) handleTokensToggleDisabled(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	token := platform.SanitizeToken(body.Token)
+	token, err := sanitizeAdminToken(body.Token)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	if token == "" {
 		writeAppError(c, platform.ValidationError("Missing token", "token"))
 		return
@@ -1270,7 +1287,11 @@ func (s *Server) handleAssetsDeleteItem(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	token := platform.SanitizeToken(body.Token)
+	token, err := sanitizeAdminToken(body.Token)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	if token == "" {
 		writeAppError(c, platform.ValidationErrorCode("Missing token", "token", "missing_token"))
 		return
@@ -1309,7 +1330,11 @@ func (s *Server) handleAssetsClearToken(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	token := platform.SanitizeToken(body.Token)
+	token, err := sanitizeAdminToken(body.Token)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	if token == "" {
 		writeAppError(c, platform.ValidationErrorCode("Missing token", "token", "missing_token"))
 		return
@@ -1618,18 +1643,34 @@ func (s *Server) handleCacheItemsDelete(c *gin.Context) {
 
 // --- helpers ---
 
-func sanitizeTokenList(raw []string) []string {
+func sanitizeAdminToken(raw string) (string, error) {
+	token := platform.SanitizeToken(raw)
+	if len(token) > adminMaxTokenLength {
+		return "", platform.ValidationErrorCode(
+			fmt.Sprintf("tokens must be <= %d characters", adminMaxTokenLength),
+			"tokens",
+			"token_too_long",
+		)
+	}
+	return token, nil
+}
+
+func sanitizeTokenList(raw []string) ([]string, error) {
 	out := []string{}
 	seen := map[string]bool{}
 	for _, t := range raw {
-		t = platform.SanitizeToken(t)
+		var err error
+		t, err = sanitizeAdminToken(t)
+		if err != nil {
+			return nil, err
+		}
 		if t == "" || seen[t] {
 			continue
 		}
 		seen[t] = true
 		out = append(out, t)
 	}
-	return out
+	return out, nil
 }
 
 func sanitizeAdminBatchTokens(raw []string) ([]string, error) {
@@ -1641,7 +1682,10 @@ func sanitizeAdminTokenMutationTokens(raw []string) ([]string, error) {
 }
 
 func sanitizeBoundedAdminTokens(raw []string, max int) ([]string, error) {
-	tokens := sanitizeTokenList(raw)
+	tokens, err := sanitizeTokenList(raw)
+	if err != nil {
+		return nil, err
+	}
 	if len(tokens) == 0 {
 		return nil, platform.ValidationError("No tokens provided", "tokens")
 	}

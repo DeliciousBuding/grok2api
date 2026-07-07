@@ -548,7 +548,7 @@ Response shape:
 
 Replaces all tokens in one or more pools. Pool names must be valid and each pool value must be an array; invalid pools or malformed pool payloads return HTTP 400 instead of being silently ignored.
 
-Token mutation endpoints accept at most 1000 unique valid tokens per request. This applies to `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, `DELETE /admin/api/tokens`, `POST /admin/api/tokens/disabled/batch`, and `PUT /admin/api/pool`; oversized lists return `too_many_tokens` before storage or background refresh work starts.
+Token mutation endpoints accept at most 1000 unique valid tokens per request, and each normalized token must be at most 4096 characters. This applies to `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, `DELETE /admin/api/tokens`, `POST /admin/api/tokens/disabled/batch`, and `PUT /admin/api/pool`; oversized lists return `too_many_tokens`, and oversized token values return `token_too_long` before storage or background refresh work starts. Validation errors do not echo raw token material.
 
 Admin token tag inputs accept at most 10 unique non-empty tags per account and each tag must be at most 64 characters after trimming. `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, and `PUT /admin/api/pool` reject invalid tags with `too_many_tags` or `tag_too_long` before storage or background refresh work starts.
 

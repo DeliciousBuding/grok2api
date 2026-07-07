@@ -880,6 +880,46 @@ func TestAdminTokenMutationsRejectTooManyTokensBeforeWork(t *testing.T) {
 	}
 }
 
+func TestAdminTokenMutationsRejectOversizedTokensBeforeWork(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	const expectedAdminMaxTokenLength = 4096
+	oversized := "tok_" + strings.Repeat("x", expectedAdminMaxTokenLength+1)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{name: "add", method: http.MethodPost, path: "/admin/api/tokens/add", body: `{"tokens":["` + oversized + `"],"pool":"basic"}`},
+		{name: "replace", method: http.MethodPost, path: "/admin/api/tokens", body: `{"basic":["` + oversized + `"]}`},
+		{name: "delete", method: http.MethodDelete, path: "/admin/api/tokens", body: `["` + oversized + `"]`},
+		{name: "disable batch", method: http.MethodPost, path: "/admin/api/tokens/disabled/batch", body: `{"tokens":["` + oversized + `"],"disabled":true}`},
+		{name: "pool replace", method: http.MethodPut, path: "/admin/api/pool", body: `{"pool":"basic","tokens":["` + oversized + `"]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), "token_too_long") {
+				t.Fatalf("expected token_too_long error, got %s", w.Body.String())
+			}
+			if strings.Contains(w.Body.String(), strings.Repeat("x", 32)) {
+				t.Fatalf("token length validation should not echo raw token material: %s", w.Body.String())
+			}
+		})
+	}
+}
+
 func TestAdminTokenMutationsRejectInvalidTagsBeforeWork(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)

@@ -165,7 +165,7 @@ Request-path config reload checks are throttled to avoid filesystem stat and TOM
 
 Admin batch endpoints use fixed worker pools bounded by the `concurrency` query parameter and reject batches above 1000 unique valid tokens with `too_many_tokens`. This bounds goroutine growth and per-request result memory for large token lists; tune `concurrency` for upstream pressure, not for request body size.
 
-Admin token mutation endpoints also reject requests above 1000 unique valid tokens with `too_many_tokens` before storage or background refresh work starts. Split larger imports, deletes, disabled-state batches, and pool replacements into smaller requests.
+Admin token mutation endpoints also reject requests above 1000 unique valid tokens with `too_many_tokens` before storage or background refresh work starts. Each normalized token is limited to 4096 characters; longer values return `token_too_long` without echoing token material. Split larger imports, deletes, disabled-state batches, and pool replacements into smaller requests.
 
 Admin account tags and request-level `grok2api_prefer_tags` are trimmed, deduplicated, sorted, and bounded to 10 unique non-empty tags with each tag at most 64 characters. Invalid tag metadata is rejected with `too_many_tags` or `tag_too_long` before storage, background refresh, or account routing work starts.
 

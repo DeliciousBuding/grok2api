@@ -200,7 +200,8 @@ func adminAuditTokenIDs(tokens []string) []string {
 }
 
 func adminAuditTokenCount(tokens []string) int {
-	return len(sanitizeTokenList(tokens))
+	clean, _ := sanitizeTokenList(tokens)
+	return len(clean)
 }
 
 func adminAuditHash(value string) string {
