@@ -1,4 +1,4 @@
-最后更新：2026-07-07 11:47
+最后更新：2026-07-07 21:12
 
 # Operations Runbook
 
@@ -145,7 +145,7 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 
 `cache.local.image_max_mb` and `cache.local.video_max_mb` set local media cache budgets in MiB. `0` disables eviction by size; negative values are treated as `0`; positive values are capped at 1048576 MiB before conversion to bytes so an oversized config cannot overflow the eviction budget.
 
-`proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` are optional but must be configured as a pair. Invalid fingerprint config is rejected at startup and by `/admin/api/config` before it is persisted: the seed must base64-decode to 48 bytes, and the HEX value must be hexadecimal and at most 512 characters. Validation errors name the field and rule without echoing the submitted secret-like value.
+`x-statsig-id` is generated in pure Go. With empty `proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex`, the process creates a fresh internally matched seed/HEX pair at startup. Configure these two fields only as an emergency override, and always as a pair. Invalid fingerprint config is rejected at startup and by `/admin/api/config` before it is persisted: the seed must base64-decode to 48 bytes, and the HEX value must be hexadecimal and at most 512 characters. Validation errors name the field and rule without echoing the submitted secret-like value.
 
 Outbound clearance header and cookie config is bounded before it can be used. `proxy.clearance.user_agent` is limited to 512 characters, `cf_cookies` to 8192 characters, `cf_clearance` to 4096 characters, and `device_id` / `x_anonuserid` / `x_challenge` / `x_signature` / `x_userid` / `statsig_id` to 1024 characters each. CR/LF is rejected for all of these fields so copied browser values cannot inject additional headers or amplify outbound request memory. Runtime admin updates return `invalid_config` before persistence when these limits are violated.
 
