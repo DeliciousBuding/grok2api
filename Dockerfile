@@ -16,5 +16,5 @@ RUN mkdir -p /app/data /app/logs && chown -R 65532:65532 /app/data /app/logs
 EXPOSE 8000
 USER 65532:65532
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD wget -qO- "http://127.0.0.1:${SERVER_PORT:-8000}/health" >/dev/null || exit 1
+    CMD wget -Y off -qO- "http://127.0.0.1:${SERVER_PORT:-8000}/health" >/dev/null || exit 1
 ENTRYPOINT ["/app/grok2api"]

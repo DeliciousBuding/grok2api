@@ -447,7 +447,7 @@ With at least one active account, it returns HTTP 200 and `status: "ready"` unle
 ### `GET /meta`
 
 ```json
-{"version": "1.0.4"}
+{"version": "1.0.5"}
 ```
 
 ### `GET /metrics`
@@ -457,7 +457,7 @@ Prometheus text-format metrics. The endpoint exposes aggregate process, account-
 Current baseline metrics:
 
 ```text
-grok2api_build_info{version="1.0.4"} 1
+grok2api_build_info{version="1.0.5"} 1
 grok2api_accounts_total 0
 grok2api_accounts_active 0
 grok2api_account_inflight 0
