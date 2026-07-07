@@ -92,7 +92,7 @@ curl -X POST http://localhost:8000/admin/api/tokens/add \
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "grok-4.20-0309",
+    "model": "grok-4.20-0309-non-reasoning",
     "messages": [{"role": "user", "content": "你好！"}],
     "stream": true
   }'
@@ -105,7 +105,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer 你的sso-token" \
   -d '{
-    "model": "grok-4.20-0309",
+    "model": "grok-4.20-0309-non-reasoning",
     "messages": [{"role": "user", "content": "你好！"}],
     "stream": true
   }'
@@ -121,7 +121,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="any")
 
 response = client.chat.completions.create(
-    model="grok-4.20-0309",
+    model="grok-4.20-0309-non-reasoning",
     messages=[{"role": "user", "content": "你好！"}],
 )
 print(response.choices[0].message.content)
@@ -135,7 +135,7 @@ import anthropic
 client = anthropic.Anthropic(base_url="http://localhost:8000", api_key="any")
 
 message = client.messages.create(
-    model="grok-4.20-0309",
+    model="grok-4.20-0309-non-reasoning",
     max_tokens=4096,
     messages=[{"role": "user", "content": "你好！"}],
 )
@@ -357,7 +357,7 @@ path = "/app/data/accounts.sqlite3"
 
 ### 可用模型
 
-**grok.com 聊天**：`grok-4.20-0309`、`grok-4.20-0309-reasoning`、`grok-4.20-heavy`、`grok-4.20-multi-agent-0309` 等 16 个模型
+**grok.com 聊天**：`grok-4.20-0309-non-reasoning`、`grok-4.20-0309`、`grok-4.20-heavy`、`grok-4.20-multi-agent-0309` 等 16 个模型
 
 **Console**：`grok-4.3-console`、`grok-4.3-high`、`grok-4.20-multi-agent-xhigh`、`grok-4.20-0309-non-reasoning-console`、`grok-build-console` 等 13 个模型（通过 console.x.ai，免费额度）
 

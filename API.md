@@ -25,7 +25,7 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
 
 ```json
 {
-  "model": "grok-4.20-0309",
+  "model": "grok-4.20-0309-non-reasoning",
   "messages": [
     {"role": "system", "content": "You are a helpful assistant."},
     {"role": "user", "content": "Hello!"}
@@ -65,7 +65,7 @@ Account tags written through admin token APIs and request-level `grok2api_prefer
 
 ```json
 {
-  "model": "grok-4.20-0309",
+  "model": "grok-4.20-0309-non-reasoning",
   "messages": [
     {
       "role": "user",
@@ -83,13 +83,13 @@ Account tags written through admin token APIs and request-level `grok2api_prefer
 #### Streaming Response (SSE)
 
 ```
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309-non-reasoning","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309-non-reasoning","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309-non-reasoning","choices":[{"index":0,"delta":{"content":"!"},"finish_reason":null}]}
 
-data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1719500000,"model":"grok-4.20-0309-non-reasoning","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 
 data: [DONE]
 ```
@@ -106,7 +106,7 @@ When `reasoning_effort` is enabled, thinking tokens appear as:
   "id": "chatcmpl-xxx",
   "object": "chat.completion",
   "created": 1719500000,
-  "model": "grok-4.20-0309",
+  "model": "grok-4.20-0309-non-reasoning",
   "choices": [{
     "index": 0,
     "message": {
@@ -181,7 +181,7 @@ Accepts Anthropic message format and converts internally.
 
 ```json
 {
-  "model": "grok-4.20-0309",
+  "model": "grok-4.20-0309-non-reasoning",
   "max_tokens": 4096,
   "system": "You are helpful.",
   "messages": [
@@ -212,7 +212,7 @@ Accepts Anthropic message format and converts internally.
   "id": "msg_xxx",
   "type": "message",
   "role": "assistant",
-  "model": "grok-4.20-0309",
+  "model": "grok-4.20-0309-non-reasoning",
   "content": [{"type": "text", "text": "Hello!"}],
   "stop_reason": "end_turn",
   "stop_sequence": null,
@@ -659,7 +659,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "model": "grok-4.20-0309",
+    "model": "grok-4.20-0309-non-reasoning",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
@@ -671,7 +671,7 @@ curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "model": "grok-4.20-0309",
+    "model": "grok-4.20-0309-non-reasoning",
     "messages": [{"role": "user", "content": "Write a poem"}],
     "stream": true
   }'
@@ -725,7 +725,7 @@ curl http://localhost:8000/v1/messages \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_API_KEY" \
   -d '{
-    "model": "grok-4.20-0309",
+    "model": "grok-4.20-0309-non-reasoning",
     "max_tokens": 4096,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
@@ -743,14 +743,14 @@ client = OpenAI(
 
 # Non-streaming
 response = client.chat.completions.create(
-    model="grok-4.20-0309",
+    model="grok-4.20-0309-non-reasoning",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 print(response.choices[0].message.content)
 
 # Streaming
 stream = client.chat.completions.create(
-    model="grok-4.20-0309",
+    model="grok-4.20-0309-non-reasoning",
     messages=[{"role": "user", "content": "Write a haiku"}],
     stream=True,
 )
@@ -770,7 +770,7 @@ client = anthropic.Anthropic(
 )
 
 message = client.messages.create(
-    model="grok-4.20-0309",
+    model="grok-4.20-0309-non-reasoning",
     max_tokens=4096,
     messages=[{"role": "user", "content": "Hello!"}],
 )
