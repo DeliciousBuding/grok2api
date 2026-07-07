@@ -1,4 +1,4 @@
-最后更新：2026-07-07 00:00
+最后更新：2026-07-07 11:15
 
 # Operations Runbook
 
@@ -162,6 +162,8 @@ Request-path config reload checks are throttled to avoid filesystem stat and TOM
 Admin batch endpoints use fixed worker pools bounded by the `concurrency` query parameter and reject batches above 1000 unique valid tokens with `too_many_tokens`. This bounds goroutine growth and per-request result memory for large token lists; tune `concurrency` for upstream pressure, not for request body size.
 
 Admin token mutation endpoints also reject requests above 1000 unique valid tokens with `too_many_tokens` before storage or background refresh work starts. Split larger imports, deletes, disabled-state batches, and pool replacements into smaller requests.
+
+Admin account tags are trimmed, deduplicated, sorted, and bounded to 10 unique non-empty tags per account with each tag at most 64 characters. Invalid tag metadata is rejected with `too_many_tags` or `tag_too_long` before storage or background refresh work starts.
 
 Admin cache multi-delete rejects requests above 1000 non-empty file names with `too_many_file_names`. This keeps one admin request from allocating or iterating over an unbounded cache-deletion list.
 

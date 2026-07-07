@@ -59,6 +59,8 @@ The main endpoint. Dispatches internally by model capability: grok.com chat, con
 
 The selector requires an account to contain all requested tags. Matching accounts are preferred inside the requested pool and mode; within that preferred set, the configured selection strategy still applies. If no eligible account has all tags, the request falls back to the normal untagged candidate set instead of failing.
 
+Account tags written through admin token APIs are trimmed, deduplicated, sorted, and bounded to 10 tags per account with each tag at most 64 characters. Oversized tag sets return `too_many_tags`; oversized tag values return `tag_too_long`.
+
 #### Messages with Images
 
 ```json
@@ -543,6 +545,8 @@ Response shape:
 Replaces all tokens in one or more pools. Pool names must be valid and each pool value must be an array; invalid pools or malformed pool payloads return HTTP 400 instead of being silently ignored.
 
 Token mutation endpoints accept at most 1000 unique valid tokens per request. This applies to `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, `DELETE /admin/api/tokens`, `POST /admin/api/tokens/disabled/batch`, and `PUT /admin/api/pool`; oversized lists return `too_many_tokens` before storage or background refresh work starts.
+
+Admin token tag inputs accept at most 10 unique non-empty tags per account and each tag must be at most 64 characters after trimming. `POST /admin/api/tokens`, `POST /admin/api/tokens/add`, and `PUT /admin/api/pool` reject invalid tags with `too_many_tags` or `tag_too_long` before storage or background refresh work starts.
 
 ### Pool & Batch Operations
 

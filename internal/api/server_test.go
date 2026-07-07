@@ -836,6 +836,58 @@ func TestAdminTokenMutationsRejectTooManyTokensBeforeWork(t *testing.T) {
 	}
 }
 
+func TestAdminTokenMutationsRejectInvalidTagsBeforeWork(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		code   string
+	}{
+		{
+			name:   "add too many tags",
+			method: http.MethodPost,
+			path:   "/admin/api/tokens/add",
+			body:   `{"tokens":["tok-a"],"pool":"basic","tags":` + tagListJSON(adminMaxTags+1, 8) + `}`,
+			code:   "too_many_tags",
+		},
+		{
+			name:   "pool tag too long",
+			method: http.MethodPut,
+			path:   "/admin/api/pool",
+			body:   `{"pool":"basic","tokens":["tok-a"],"tags":["` + strings.Repeat("x", adminMaxTagLength+1) + `"]}`,
+			code:   "tag_too_long",
+		},
+		{
+			name:   "replace embedded tag too long",
+			method: http.MethodPost,
+			path:   "/admin/api/tokens",
+			body:   `{"basic":[{"token":"tok-a","tags":["` + strings.Repeat("x", adminMaxTagLength+1) + `"]}]}`,
+			code:   "tag_too_long",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+			req.Header.Set("Authorization", "Bearer admin")
+			req.Header.Set("Content-Type", "application/json")
+
+			server.Router().ServeHTTP(w, req)
+
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.code) {
+				t.Fatalf("expected %s error, got %s", tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
 func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
 	started := make(chan struct{}, len(tokens))
@@ -2363,6 +2415,19 @@ func tokenMutationBodyJSON(n int, shape string) string {
 	default:
 		return `{}`
 	}
+}
+
+func tagListJSON(n int, width int) string {
+	var b strings.Builder
+	b.WriteByte('[')
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `"tag-%0*d"`, width, i)
+	}
+	b.WriteByte(']')
+	return b.String()
 }
 
 func cacheNamesJSON(n int) string {

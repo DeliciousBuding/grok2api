@@ -145,6 +145,8 @@ const (
 	adminMaxBatchConcurrency     = 80
 	adminMaxTokenMutationTokens  = 1000
 	adminMaxBatchTokens          = adminMaxTokenMutationTokens
+	adminMaxTags                 = 10
+	adminMaxTagLength            = 64
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000
@@ -391,7 +393,12 @@ func (s *Server) handleTokensReplace(c *gin.Context) {
 				continue
 			}
 			seen[token] = true
-			upserts = append(upserts, account.Upsert{Token: token, Pool: poolName, Tags: account.SortTags(tags)})
+			cleanTags, err := sanitizeAdminTags(tags)
+			if err != nil {
+				writeAppError(c, err)
+				return
+			}
+			upserts = append(upserts, account.Upsert{Token: token, Pool: poolName, Tags: cleanTags})
 			allTokens = append(allTokens, token)
 		}
 		total += len(upserts)
@@ -448,7 +455,11 @@ func (s *Server) handleTokensAdd(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tags := account.SortTags(body.Tags)
+	tags, err := sanitizeAdminTags(body.Tags)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), timeoutClassDuration("admin", 60))
 	defer cancel()
 
@@ -822,7 +833,11 @@ func (s *Server) handlePoolReplace(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	tags := account.SortTags(body.Tags)
+	tags, err := sanitizeAdminTags(body.Tags)
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	upserts := []account.Upsert{}
 	for _, tok := range tokens {
 		upserts = append(upserts, account.Upsert{Token: tok, Pool: pool, Tags: tags})
@@ -1645,6 +1660,40 @@ func ensureAdminTokenMutationLimit(n int) error {
 		)
 	}
 	return nil
+}
+
+func sanitizeAdminTags(raw []string) ([]string, error) {
+	seen := map[string]bool{}
+	for _, tag := range raw {
+		tag = strings.TrimSpace(tag)
+		if tag == "" {
+			continue
+		}
+		if len(tag) > adminMaxTagLength {
+			return nil, platform.ValidationErrorCode(
+				fmt.Sprintf("tags must be <= %d characters", adminMaxTagLength),
+				"tags",
+				"tag_too_long",
+			)
+		}
+		if seen[tag] {
+			continue
+		}
+		seen[tag] = true
+		if len(seen) > adminMaxTags {
+			return nil, platform.ValidationErrorCode(
+				fmt.Sprintf("tags must be <= %d", adminMaxTags),
+				"tags",
+				"too_many_tags",
+			)
+		}
+	}
+	clean := make([]string, 0, len(seen))
+	for tag := range seen {
+		clean = append(clean, tag)
+	}
+	sort.Strings(clean)
+	return clean, nil
 }
 
 func sanitizeAdminCacheItemNames(raw []string) ([]string, error) {
