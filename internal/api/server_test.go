@@ -1901,6 +1901,25 @@ func TestAdminCacheMutationsRejectInvalidTypeAndJSON(t *testing.T) {
 	}
 }
 
+func TestAdminCacheItemsDeleteRejectsTooManyNames(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/cache/items/delete", strings.NewReader(cacheNamesJSON(adminMaxCacheItemNames+1)))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "too_many_file_names") {
+		t.Fatalf("expected too_many_file_names error, got %s", w.Body.String())
+	}
+}
+
 func TestAdminAssetsListUsesBoundedPaginationAndFilters(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 	repo := &snapshotRepo{listPage: &account.Page{
@@ -2227,6 +2246,19 @@ func batchTokensJSON(n int) string {
 			b.WriteByte(',')
 		}
 		fmt.Fprintf(&b, `"tok-%04d"`, i)
+	}
+	b.WriteString(`]}`)
+	return b.String()
+}
+
+func cacheNamesJSON(n int) string {
+	var b strings.Builder
+	b.WriteString(`{"names":[`)
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `"cache-%04d.png"`, i)
 	}
 	b.WriteString(`]}`)
 	return b.String()

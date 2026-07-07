@@ -616,6 +616,7 @@ Omitting `confirm: true` returns HTTP 400 with `confirmation_required`.
 | `POST` | `/admin/api/cache/items/delete` | Delete multiple items |
 
 Cache-management endpoints accept only `image` or `video` for `type` / `cache_type`; invalid values return HTTP 400 with `invalid_cache_type`.
+`POST /admin/api/cache/items/delete` accepts at most 1000 non-empty file names per request; larger batches return `too_many_file_names`.
 
 #### `GET /admin/api/cache/list`
 

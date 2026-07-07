@@ -134,6 +134,7 @@ const (
 
 	adminDefaultCachePageSize = 1000
 	adminMaxCachePageSize     = 1000
+	adminMaxCacheItemNames    = 1000
 
 	adminDefaultAssetConcurrency = 20
 	adminMaxAssetConcurrency     = 80
@@ -1551,15 +1552,9 @@ func (s *Server) handleCacheItemsDelete(c *gin.Context) {
 		writeAppError(c, err)
 		return
 	}
-	clean := []string{}
-	for _, n := range body.Names {
-		n = strings.TrimSpace(n)
-		if n != "" {
-			clean = append(clean, n)
-		}
-	}
-	if len(clean) == 0 {
-		writeAppError(c, platform.ValidationErrorCode("Missing file names", "names", "missing_file_names"))
+	clean, err := sanitizeAdminCacheItemNames(body.Names)
+	if err != nil {
+		writeAppError(c, err)
 		return
 	}
 	mediaType, err := parseAdminCacheTypeValue(body.Type)
@@ -1619,6 +1614,27 @@ func sanitizeAdminBatchTokens(raw []string) ([]string, error) {
 		)
 	}
 	return tokens, nil
+}
+
+func sanitizeAdminCacheItemNames(raw []string) ([]string, error) {
+	clean := []string{}
+	for _, n := range raw {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			clean = append(clean, n)
+		}
+	}
+	if len(clean) == 0 {
+		return nil, platform.ValidationErrorCode("Missing file names", "names", "missing_file_names")
+	}
+	if len(clean) > adminMaxCacheItemNames {
+		return nil, platform.ValidationErrorCode(
+			fmt.Sprintf("names must be <= %d", adminMaxCacheItemNames),
+			"names",
+			"too_many_file_names",
+		)
+	}
+	return clean, nil
 }
 
 func maskToken(t string) string {
