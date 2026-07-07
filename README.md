@@ -423,7 +423,7 @@ docker run -d \
 
 > **可选环境变量**：`SERVER_PORT`（覆盖监听端口）、`PROXY_HTTP`（覆盖出站代理）、`TZ`（时区，如 `Asia/Shanghai`）。
 >
-> **指定版本**：`docker pull ghcr.io/deliciousbuding/grok2api:v1.0.1`，或用 commit 短哈希 `ghcr.io/deliciousbuding/grok2api:<sha>` 锁定具体构建。
+> **指定版本**：`docker pull ghcr.io/deliciousbuding/grok2api:v1.0.2`，或用 commit 短哈希 `ghcr.io/deliciousbuding/grok2api:<sha>` 锁定具体构建。
 >
 > **发布流程**：`.github/workflows/ci.yml` 负责 PR 质量门禁；`.github/workflows/build_docker.yml` 使用仓库 `GITHUB_TOKEN` 发布 GHCR 镜像，不需要自定义 PAT。
 
