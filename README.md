@@ -300,7 +300,7 @@ max_download_bytes = 31457280   # 远程资源下载上限（字节，<=0 使用
 max_inline_image_bytes = 31457280  # 图像编辑源图上限（字节，<=0 使用安全默认值）
 max_fetch_image_bytes = 52428800   # b64_json 图片抓取上限（字节，<=0 使用安全默认值）
 fetch_image_timeout_sec = 30       # b64_json 图片抓取超时（秒，<=0 使用安全默认值）
-max_fetch_image_concurrency = 0    # b64_json 图片抓取并发上限，0 = 不限制
+max_fetch_image_concurrency = 0    # b64_json 图片抓取并发上限，0 = 不限制，正数有效上限 256
 
 [upstream]
 max_response_bytes = 16777216   # 非流式上游响应上限（字节，<=0 使用安全默认值）

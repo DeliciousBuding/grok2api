@@ -139,7 +139,7 @@ max_inline_image_bytes = 31457280
 max_fetch_image_bytes = 52428800
 # response_format=b64_json 远程图片抓取超时（秒），<=0 使用安全默认值 30 秒
 fetch_image_timeout_sec = 30
-# response_format=b64_json 远程图片抓取并发上限，0 = 不限制
+# response_format=b64_json 远程图片抓取并发上限，0 = 不限制，正数有效上限 256
 max_fetch_image_concurrency = 0
 
 [upstream]

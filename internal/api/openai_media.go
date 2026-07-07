@@ -560,6 +560,8 @@ func extractImageURLsFromMarkdown(text string) []string {
 	return out
 }
 
+const maxFetchImageConcurrency = 256
+
 var fetchImageLimiter = newDynamicConcurrencyLimiter()
 var fetchImageTransport http.RoundTripper = newFetchImageTransport()
 
@@ -731,7 +733,7 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 	if err := validateFetchImageURL(url); err != nil {
 		return "", err
 	}
-	limit := config.Global().GetInt("asset.max_fetch_image_concurrency", 0)
+	limit := configuredFetchImageConcurrency()
 	release, err := fetchImageLimiter.acquire(ctx, limit)
 	if err != nil {
 		return "", err
@@ -756,6 +758,17 @@ func fetchImageBase64(ctx context.Context, url string) (string, error) {
 		return "", err
 	}
 	return base64.StdEncoding.EncodeToString(body), nil
+}
+
+func configuredFetchImageConcurrency() int {
+	limit := config.Global().GetInt("asset.max_fetch_image_concurrency", 0)
+	if limit <= 0 {
+		return 0
+	}
+	if limit > maxFetchImageConcurrency {
+		return maxFetchImageConcurrency
+	}
+	return limit
 }
 
 func fetchImageHTTPClient() *http.Client {

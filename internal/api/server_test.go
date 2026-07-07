@@ -1547,6 +1547,48 @@ func TestFetchImageBase64BoundsConcurrentDownloads(t *testing.T) {
 	}
 }
 
+func TestFetchImageBase64ClampsMisconfiguredConcurrency(t *testing.T) {
+	loadTestConfig(t, fmt.Sprintf("[asset]\nmax_fetch_image_concurrency = %d\n", maxFetchImageConcurrency+1))
+	limiter := newDynamicConcurrencyLimiter()
+	previous := fetchImageLimiter
+	fetchImageLimiter = limiter
+	t.Cleanup(func() { fetchImageLimiter = previous })
+
+	releases := make([]func(), 0, maxFetchImageConcurrency)
+	for i := 0; i < maxFetchImageConcurrency; i++ {
+		release, err := limiter.acquire(context.Background(), maxFetchImageConcurrency)
+		if err != nil {
+			releaseAll(releases)
+			t.Fatalf("pre-acquire fetch image slot %d/%d: %v", i+1, maxFetchImageConcurrency, err)
+		}
+		releases = append(releases, release)
+	}
+	defer releaseAll(releases)
+
+	var upstreamCalls int32
+	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
+		atomic.AddInt32(&upstreamCalls, 1)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Body:       io.NopCloser(strings.NewReader("ok")),
+			Request:    req,
+		}, nil
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	_, err := fetchImageBase64(ctx, "https://assets.grok.com/image.png")
+	if err == nil {
+		t.Fatal("expected clamped image fetch concurrency to wait for capacity")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded while waiting for capacity, got %v", err)
+	}
+	if got := atomic.LoadInt32(&upstreamCalls); got != 0 {
+		t.Fatalf("expected no upstream call while clamped limiter is full, got %d", got)
+	}
+}
+
 func TestDynamicConcurrencyLimiterReleaseIsIdempotent(t *testing.T) {
 	limiter := newDynamicConcurrencyLimiter()
 	ctx := context.Background()
