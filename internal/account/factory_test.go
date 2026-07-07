@@ -99,3 +99,52 @@ backend = "pg+redis"
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestNewRepositoryFromConfigSelectsPostgresBackend(t *testing.T) {
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.toml")
+	user := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(defaults, []byte(`
+[account.storage]
+backend = "postgres"
+[account.postgresql]
+dsn = "postgres://user:pass@example.invalid:5432/grok2api?sslmode=disable"
+`), 0o644); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	config.SetPaths(defaults, user)
+	if err := config.Load(); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	repo, info, err := NewRepositoryFromConfig(config.Global())
+	if err != nil {
+		t.Fatalf("new repository: %v", err)
+	}
+	if info.Backend != "postgres" || info.Target != "postgres" {
+		t.Fatalf("unexpected repository info: %#v", info)
+	}
+	if _, ok := repo.(*PostgresRepository); !ok {
+		t.Fatalf("expected PostgresRepository, got %T", repo)
+	}
+}
+
+func TestNewRepositoryFromConfigRequiresPostgresDSN(t *testing.T) {
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.toml")
+	user := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(defaults, []byte(`
+[account.storage]
+backend = "pg"
+`), 0o644); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	config.SetPaths(defaults, user)
+	if err := config.Load(); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	if _, _, err := NewRepositoryFromConfig(config.Global()); err == nil || !strings.Contains(err.Error(), "requires") {
+		t.Fatalf("expected required DSN error, got %v", err)
+	}
+}

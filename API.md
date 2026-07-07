@@ -447,7 +447,7 @@ With at least one active account, it returns HTTP 200 and `status: "ready"` unle
 ### `GET /meta`
 
 ```json
-{"version": "1.0.0"}
+{"version": "1.0.4"}
 ```
 
 ### `GET /metrics`
@@ -457,7 +457,7 @@ Prometheus text-format metrics. The endpoint exposes aggregate process, account-
 Current baseline metrics:
 
 ```text
-grok2api_build_info{version="1.0.0"} 1
+grok2api_build_info{version="1.0.4"} 1
 grok2api_accounts_total 0
 grok2api_accounts_active 0
 grok2api_account_inflight 0
@@ -498,7 +498,7 @@ Mutating admin endpoints emit an `admin_audit` log event after each request. Eve
 | `GET` | `/admin/api/config` | Get current config |
 | `POST` | `/admin/api/config` | Update config (persisted to user config file) |
 
-Startup-only keys cannot be changed through `POST /admin/api/config`: `account.storage.*`, `account.local.*`, `account.sqlite.*`, `account.postgresql.*`, `account.redis.*`, `server.*_timeout_sec`, and `server.max_header_bytes`. Restart with the desired config to switch account storage or HTTP server lifecycle/resource-boundary settings. Reserved distributed backends such as `pg+redis` fail fast until implemented.
+Startup-only keys cannot be changed through `POST /admin/api/config`: `account.storage.*`, `account.local.*`, `account.sqlite.*`, `account.postgresql.*`, `account.redis.*`, `server.*_timeout_sec`, and `server.max_header_bytes`. Restart with the desired config to switch account storage or HTTP server lifecycle/resource-boundary settings. The supported account backends are `text`/`jsonl`/`local`, `sqlite`, and `postgres`; reserved distributed backends such as `pg+redis` fail fast until implemented.
 
 `x-statsig-id` is generated in pure Go. When `proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` are empty, the process creates a fresh internally matched seed/HEX pair at startup. If configured as an emergency override, the two values must be provided together: the seed must base64-decode to 48 bytes, and the HEX fingerprint must contain only hexadecimal characters and be at most 512 characters. Invalid values return HTTP 400 with `invalid_config` and do not echo the submitted fingerprint values.
 
@@ -585,7 +585,7 @@ Batch endpoints accept a bounded `concurrency` query parameter and at most 1000 
 | `GET` | `/admin/api/storage` | Get storage info |
 | `POST` | `/admin/api/sync` | Force directory sync |
 
-`GET /admin/api/storage` returns the active account repository backend as `{"type":"jsonl"}` or `{"type":"sqlite"}`. This is startup state; changing storage backend config still requires a restart.
+`GET /admin/api/storage` returns the active account repository backend as `{"type":"jsonl"}`, `{"type":"sqlite"}`, or `{"type":"postgres"}`. This is startup state; changing storage backend config still requires a restart.
 
 ### Assets
 

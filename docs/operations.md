@@ -60,11 +60,23 @@ path = "/app/data/accounts.sqlite3"
 
 SQLite uses a local database with WAL mode, `synchronous=NORMAL`, and a busy timeout. Treat it as a single-active-process backend; do not point multiple running gateway instances at the same SQLite account database. Back up the database together with its `-wal` and `-shm` files if they exist.
 
-`pg+redis`, `postgres+redis`, and `postgresql+redis` are reserved distributed backend names for future multi-instance account-pool coordination. They currently fail at startup with a clear error instead of silently falling back to a local backend.
+For deployments that already have a managed or shared PostgreSQL service, use the PostgreSQL backend:
+
+```toml
+[account.storage]
+backend = "postgres"
+
+[account.postgresql]
+dsn = "postgres://grok2api:<password>@postgres:5432/grok2api?sslmode=disable"
+```
+
+The PostgreSQL backend stores records in `accounts` and `account_meta` tables and uses row-level revision locking for mutations. It is suitable for single-active deployments and modest multi-instance sharing. It does not require Redis.
+
+`pg+redis`, `postgres+redis`, and `postgresql+redis` remain reserved distributed backend names for future account-pool coordination. They currently fail at startup with a clear error instead of silently falling back to a local or PostgreSQL backend.
 
 Storage backend settings, `server.*_timeout_sec` settings, and `server.max_header_bytes` are startup-only. Do not expect `/admin/api/config` changes to move a running process between JSONL, SQLite, a future distributed backend, or a different HTTP server timeout/header-size profile.
 
-For container-only overrides, set `ACCOUNT_STORAGE_BACKEND=sqlite` and optionally `ACCOUNT_SQLITE_PATH=/app/data/accounts.sqlite3`.
+For container-only overrides, set `ACCOUNT_STORAGE_BACKEND=sqlite` and optionally `ACCOUNT_SQLITE_PATH=/app/data/accounts.sqlite3`, or set `ACCOUNT_STORAGE_BACKEND=postgres` plus `ACCOUNT_POSTGRES_DSN`.
 
 ## Health Checks
 
@@ -191,7 +203,7 @@ Successful request feedback also uses the same small bounded background task gat
 
 Unauthorized failure feedback persists account-failure state with a bounded 5 second repository deadline, so a slow account backend cannot hold the request path indefinitely.
 
-`GET /admin/api/storage` reports the active account storage backend (`jsonl` or `sqlite`) so operators can verify the startup configuration before importing or replacing large account pools.
+`GET /admin/api/storage` reports the active account storage backend (`jsonl`, `sqlite`, or `postgres`) so operators can verify the startup configuration before importing or replacing large account pools.
 
 Use account tags for soft workload routing. Add tags through the admin token APIs, then send `grok2api_prefer_tags` on `/v1/chat/completions` or `/v1/responses` requests. The selector prefers accounts that contain all requested tags, but falls back to the normal candidate set when none are available; use separate API keys, admission limits, or deployments when strict tenant isolation is required.
 
@@ -294,7 +306,7 @@ docker run --rm \
   tar czf /backup/grok2api-data-backup.tgz -C /data .
 ```
 
-The important runtime files are account storage, user config, and local media cache under `/app/data`. For SQLite account storage, include `accounts.sqlite3`, `accounts.sqlite3-wal`, and `accounts.sqlite3-shm` when present.
+The important runtime files are account storage, user config, and local media cache under `/app/data`. For SQLite account storage, include `accounts.sqlite3`, `accounts.sqlite3-wal`, and `accounts.sqlite3-shm` when present. For PostgreSQL account storage, use `pg_dump` for the Grok2API database or schema in addition to backing up `/app/data/config.toml` and media cache.
 
 ## Rollback
 

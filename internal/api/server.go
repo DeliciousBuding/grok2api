@@ -21,6 +21,9 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
+// Version is set by main at startup and exposed through /meta and metrics.
+var Version = "dev"
+
 // Server bundles the dependencies every handler needs.
 type Server struct {
 	Repo       account.Repository
@@ -146,7 +149,7 @@ func (s *Server) Router() *gin.Engine {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 	engine.GET("/meta", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"version": "1.0.0"})
+		c.JSON(http.StatusOK, gin.H{"version": Version})
 	})
 	engine.GET("/metrics", s.handleMetrics)
 	engine.GET("/ready", s.handleReady)
@@ -436,7 +439,7 @@ func (s *Server) handleMetrics(c *gin.Context) {
 	}
 	c.Header("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	_, _ = c.Writer.Write([]byte(s.metricsRegistry().RenderText([]metrics.Gauge{
-		{Name: "grok2api_build_info", Help: "Build information.", Labels: map[string]string{"version": "1.0.0"}, Value: 1},
+		{Name: "grok2api_build_info", Help: "Build information.", Labels: map[string]string{"version": Version}, Value: 1},
 		{Name: "grok2api_accounts_total", Help: "Accounts currently loaded in memory.", Value: float64(total)},
 		{Name: "grok2api_accounts_active", Help: "Active accounts currently selectable.", Value: float64(active)},
 		{Name: "grok2api_account_inflight", Help: "Current in-flight upstream requests across accounts.", Value: float64(inflight)},

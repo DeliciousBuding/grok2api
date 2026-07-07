@@ -33,8 +33,14 @@ func NewRepositoryFromConfig(cfg *config.Snapshot) (Repository, RepositoryInfo, 
 	case "sqlite", "sqlite3":
 		path := resolveSQLiteAccountPath(cfg)
 		return NewSQLiteRepository(path), RepositoryInfo{Backend: "sqlite", Target: path}, nil
-	case "pg+redis", "postgres+redis", "postgresql+redis", "postgres", "postgresql", "pg":
-		return nil, RepositoryInfo{Backend: backend}, fmt.Errorf("account storage backend %q is not implemented; use text or sqlite", backend)
+	case "postgres", "postgresql", "pg":
+		dsn := resolvePostgresAccountDSN(cfg)
+		if dsn == "" {
+			return nil, RepositoryInfo{Backend: "postgres"}, fmt.Errorf("account storage backend %q requires account.postgresql.dsn or ACCOUNT_POSTGRES_DSN", backend)
+		}
+		return NewPostgresRepository(dsn), RepositoryInfo{Backend: "postgres", Target: "postgres"}, nil
+	case "pg+redis", "postgres+redis", "postgresql+redis":
+		return nil, RepositoryInfo{Backend: backend}, fmt.Errorf("account storage backend %q is not implemented; use text, sqlite, or postgres", backend)
 	default:
 		return nil, RepositoryInfo{Backend: backend}, fmt.Errorf("unsupported account storage backend %q", backend)
 	}
@@ -58,4 +64,11 @@ func resolveSQLiteAccountPath(cfg *config.Snapshot) string {
 		return p
 	}
 	return filepath.Join(platform.DataDir(), "accounts.sqlite3")
+}
+
+func resolvePostgresAccountDSN(cfg *config.Snapshot) string {
+	if p := strings.TrimSpace(os.Getenv("ACCOUNT_POSTGRES_DSN")); p != "" {
+		return p
+	}
+	return strings.TrimSpace(cfg.GetStr("account.postgresql.dsn", ""))
 }

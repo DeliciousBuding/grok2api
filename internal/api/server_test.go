@@ -146,18 +146,29 @@ func TestRequestSizeMiddlewareDefaultJSONLimitDoesNotCapMultipart(t *testing.T) 
 func TestAdminStorageEndpointReportsRepositoryBackend(t *testing.T) {
 	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
 
-	server := NewServer(account.NewSQLiteRepository("accounts.sqlite3"), nil, nil, nil, nil)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/storage", nil)
-	req.Header.Set("Authorization", "Bearer admin")
+	for _, tc := range []struct {
+		name string
+		repo account.Repository
+		want string
+	}{
+		{name: "sqlite", repo: account.NewSQLiteRepository("accounts.sqlite3"), want: `"type":"sqlite"`},
+		{name: "postgres", repo: account.NewPostgresRepository("postgres://redacted@example.invalid/grok2api"), want: `"type":"postgres"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := NewServer(tc.repo, nil, nil, nil, nil)
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/admin/api/storage", nil)
+			req.Header.Set("Authorization", "Bearer admin")
 
-	server.Router().ServeHTTP(w, req)
+			server.Router().ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), `"type":"sqlite"`) {
-		t.Fatalf("expected sqlite storage type, got %s", w.Body.String())
+			if w.Code != http.StatusOK {
+				t.Fatalf("expected 200, got %d body=%s", w.Code, w.Body.String())
+			}
+			if !strings.Contains(w.Body.String(), tc.want) {
+				t.Fatalf("expected %s storage type, got %s", tc.want, w.Body.String())
+			}
+		})
 	}
 }
 

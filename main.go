@@ -39,8 +39,8 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/storage"
 )
 
-// Project version (overridden at build time via -ldflags).
-const projectVersion = "1.0.0"
+// Version is overridden at build time via -ldflags.
+var Version = "dev"
 
 func main() {
 	// 1. Early logging setup — read LOG_LEVEL/LOG_FILE_ENABLED before config.
@@ -53,7 +53,8 @@ func main() {
 	}
 	logger.Setup(logLevel, fileLogging, logDir, 7)
 
-	logger.Infof("application startup: service=grok2api version=%s platform=%s", projectVersion, runtime.GOOS)
+	api.Version = Version
+	logger.Infof("application startup: service=grok2api version=%s platform=%s", Version, runtime.GOOS)
 
 	// 2. Load configuration.
 	defaultsPath := defaultsConfigPath()

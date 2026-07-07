@@ -92,7 +92,7 @@ heavy_interval_sec = 7200
 max_inflight = 8
 
 [account.storage]
-# 账号存储后端：text/jsonl/local 或 sqlite。pg+redis 会 fail-fast，保留给分布式后端实现。
+# 账号存储后端：text/jsonl/local、sqlite 或 postgres。pg+redis 会 fail-fast，保留给分布式后端实现。
 backend = "text"
 
 [account.local]
@@ -104,7 +104,7 @@ path = ""
 path = ""
 
 [account.postgresql]
-# 预留：未来 pg+redis 后端的 PostgreSQL DSN。
+# PostgreSQL 账号后端 DSN。生产建议使用独立数据库或 schema。
 dsn = ""
 
 [account.redis]

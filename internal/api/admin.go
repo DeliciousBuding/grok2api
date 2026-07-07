@@ -33,6 +33,8 @@ func repositoryStorageType(repo account.Repository) string {
 	switch repo.(type) {
 	case *account.SQLiteRepository:
 		return "sqlite"
+	case *account.PostgresRepository:
+		return "postgres"
 	case *account.TxtRepository:
 		return "jsonl"
 	default:
