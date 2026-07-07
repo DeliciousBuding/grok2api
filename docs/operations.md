@@ -137,7 +137,7 @@ timeout = 60
 max_response_bytes = 16777216
 ```
 
-Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`.
+Use lower limits for small account pools. A good starting point is to keep `global_max_inflight` below `account_count * account.selection.max_inflight`. `account.selection.max_inflight` applies per account across quota and random selection strategies; invalid values fall back to the built-in default and positive values are capped at 256.
 
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked bodies. When it is `0`, non-multipart write requests still use a built-in 10MiB default limit; positive values are capped at 256MiB before the request body reader is wrapped. Multipart media endpoints keep their existing multipart and per-file limits when this setting is `0`. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 

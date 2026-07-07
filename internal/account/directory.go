@@ -87,6 +87,8 @@ func (d *Directory) Strategy() Strategy {
 func (d *Directory) SetMaxInflight(n int) {
 	if n <= 0 {
 		n = quotaMaxInflight
+	} else if n > maxAccountSelectionInflight {
+		n = maxAccountSelectionInflight
 	}
 	d.mu.Lock()
 	d.maxInflight = n
@@ -616,15 +618,17 @@ func (d *Directory) Revision() int {
 }
 
 const (
-	quotaMaxInflight  = 12
-	randomMaxFails    = 5
-	successStep       = 0.12
-	authFactor        = 0.55
-	forbiddenFactor   = 0.25
-	rateLimitFactor   = 0.45
-	serverErrorFactor = 0.75
-	minHealth         = 0.05
-	consoleCoolingSec = 14400
+	quotaMaxInflight = 12
+	// One account should never absorb unbounded tenant concurrency.
+	maxAccountSelectionInflight = 256
+	randomMaxFails              = 5
+	successStep                 = 0.12
+	authFactor                  = 0.55
+	forbiddenFactor             = 0.25
+	rateLimitFactor             = 0.45
+	serverErrorFactor           = 0.75
+	minHealth                   = 0.05
+	consoleCoolingSec           = 14400
 )
 
 func ptrVal(p *int64) int64 {

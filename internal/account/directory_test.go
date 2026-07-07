@@ -194,6 +194,15 @@ func TestSetMaxInflightIgnoresInvalidValues(t *testing.T) {
 	}
 }
 
+func TestSetMaxInflightClampsMisconfiguredLargeValue(t *testing.T) {
+	dir := NewDirectory(nil)
+	dir.SetMaxInflight(10_000)
+
+	if dir.maxInflight != maxAccountSelectionInflight {
+		t.Fatalf("large max inflight should clamp to %d, got %d", maxAccountSelectionInflight, dir.maxInflight)
+	}
+}
+
 func TestDirectorySyncAdvancesRevisionOnNoopRepositoryChange(t *testing.T) {
 	ctx := context.Background()
 	repo := NewTxtRepository(filepath.Join(t.TempDir(), "accounts.jsonl"))

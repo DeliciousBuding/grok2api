@@ -267,7 +267,7 @@ super_interval_sec = 7200       # super 池刷新间隔（秒）
 heavy_interval_sec = 7200       # heavy 池刷新间隔（秒）
 
 [account.selection]
-max_inflight = 8                # 单号并发上限，quota/random 选号策略均生效
+max_inflight = 8                # 单号并发上限，quota/random 选号策略均生效，正数有效上限 256
 
 [account.storage]
 backend = "text"                # text/jsonl/local 或 sqlite；pg+redis 当前会 fail-fast
