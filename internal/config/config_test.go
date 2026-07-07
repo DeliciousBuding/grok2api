@@ -112,6 +112,77 @@ func TestLoadRejectsInvalidStatsigPairConfig(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsUnsafeClearanceHeaderConfig(t *testing.T) {
+	cases := []struct {
+		name  string
+		body  string
+		want  string
+		leaks []string
+	}{
+		{
+			name:  "user agent with newline",
+			body:  "[proxy.clearance]\nuser_agent = \"Mozilla/5.0\\r\\nX-Injected: yes\"\n",
+			want:  "proxy.clearance.user_agent must not contain CR or LF",
+			leaks: []string{"X-Injected"},
+		},
+		{
+			name:  "oversized user agent",
+			body:  "[proxy.clearance]\nuser_agent = \"" + strings.Repeat("u", 513) + "\"\n",
+			want:  "proxy.clearance.user_agent must be <= 512 characters",
+			leaks: []string{strings.Repeat("u", 32)},
+		},
+		{
+			name:  "cookie with newline",
+			body:  "[proxy.clearance]\ncf_cookies = \"clearance_cookie=secret\\nInjected=yes\"\n",
+			want:  "proxy.clearance.cf_cookies must not contain CR or LF",
+			leaks: []string{"secret", "Injected=yes"},
+		},
+		{
+			name:  "oversized cookie",
+			body:  "[proxy.clearance]\ncf_cookies = \"" + strings.Repeat("c", 8193) + "\"\n",
+			want:  "proxy.clearance.cf_cookies must be <= 8192 characters",
+			leaks: []string{strings.Repeat("c", 32)},
+		},
+		{
+			name:  "manual statsig id with newline",
+			body:  "[proxy.clearance]\nstatsig_id = \"stat\\r\\nX-Injected: yes\"\n",
+			want:  "proxy.clearance.statsig_id must not contain CR or LF",
+			leaks: []string{"X-Injected"},
+		},
+		{
+			name:  "oversized x signature",
+			body:  "[proxy.clearance]\nx_signature = \"" + strings.Repeat("s", 1025) + "\"\n",
+			want:  "proxy.clearance.x_signature must be <= 1024 characters",
+			leaks: []string{strings.Repeat("s", 32)},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			defaults := filepath.Join(dir, "defaults.toml")
+			user := filepath.Join(dir, "config.toml")
+			if err := os.WriteFile(defaults, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			s := &Snapshot{defaultsPath: defaults, userPath: user, defaultsMtime: -1, userMtime: -1}
+
+			err := s.Load()
+
+			if err == nil {
+				t.Fatal("expected invalid clearance config to fail loading")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
+			for _, leak := range tc.leaks {
+				if strings.Contains(err.Error(), leak) {
+					t.Fatalf("clearance config error should not echo raw values: %v", err)
+				}
+			}
+		})
+	}
+}
+
 func TestUpdateRejectsInvalidStatsigPairBeforePersisting(t *testing.T) {
 	dir := t.TempDir()
 	defaults := filepath.Join(dir, "defaults.toml")

@@ -502,6 +502,8 @@ Startup-only keys cannot be changed through `POST /admin/api/config`: `account.s
 
 `proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` must be configured together or both left empty. The seed must base64-decode to 48 bytes; the HEX fingerprint must contain only hexadecimal characters and be at most 512 characters. Invalid values return HTTP 400 with `invalid_config` and do not echo the submitted fingerprint values.
 
+`proxy.clearance` values used in outbound headers and cookies are also bounded at startup and by `POST /admin/api/config`. `user_agent` is limited to 512 characters; `cf_cookies` to 8192 characters; `cf_clearance` to 4096 characters; `device_id`, `x_anonuserid`, `x_challenge`, `x_signature`, `x_userid`, and `statsig_id` to 1024 characters. These fields must not contain CR or LF. Invalid values return HTTP 400 with `invalid_config`; error messages identify the field and rule without echoing raw cookie, token, or fingerprint material.
+
 ### Token Management
 
 | Method | Path | Description |

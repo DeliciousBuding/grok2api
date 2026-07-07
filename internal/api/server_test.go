@@ -170,6 +170,28 @@ func TestAdminConfigUpdateRejectsInvalidStatsigPairAsBadRequest(t *testing.T) {
 	}
 }
 
+func TestAdminConfigUpdateRejectsUnsafeClearanceHeaderConfig(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	body := `{"proxy":{"clearance":{"cf_cookies":"clearance_cookie=secret\r\nX-Injected: yes"}}}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_config") {
+		t.Fatalf("expected invalid_config code, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "secret") || strings.Contains(w.Body.String(), "X-Injected") {
+		t.Fatalf("config validation error should not echo raw clearance values: %s", w.Body.String())
+	}
+}
+
 func TestMetricsEndpointDoesNotExposeTokens(t *testing.T) {
 	loadTestConfig(t, "")
 

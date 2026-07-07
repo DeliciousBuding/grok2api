@@ -134,8 +134,18 @@ func (s *Snapshot) loadLocked() error {
 }
 
 func validateLoadedConfig(data map[string]any) error {
-	return validateStatsigConfig(data)
+	if err := validateStatsigConfig(data); err != nil {
+		return err
+	}
+	return validateClearanceHeaderConfig(data)
 }
+
+const (
+	clearanceUserAgentMaxLength = 512
+	clearanceCookieMaxLength    = 8192
+	clearanceValueMaxLength     = 1024
+	clearanceSecretMaxLength    = 4096
+)
 
 func validateStatsigConfig(data map[string]any) error {
 	seed := strings.TrimSpace(getNestedString(data, "proxy.clearance.statsig_seed"))
@@ -161,6 +171,36 @@ func validateStatsigConfig(data map[string]any) error {
 	return nil
 }
 
+func validateClearanceHeaderConfig(data map[string]any) error {
+	fields := []struct {
+		key string
+		max int
+	}{
+		{key: "proxy.clearance.user_agent", max: clearanceUserAgentMaxLength},
+		{key: "proxy.clearance.cf_cookies", max: clearanceCookieMaxLength},
+		{key: "proxy.clearance.cf_clearance", max: clearanceSecretMaxLength},
+		{key: "proxy.clearance.device_id", max: clearanceValueMaxLength},
+		{key: "proxy.clearance.x_anonuserid", max: clearanceValueMaxLength},
+		{key: "proxy.clearance.x_challenge", max: clearanceValueMaxLength},
+		{key: "proxy.clearance.x_signature", max: clearanceValueMaxLength},
+		{key: "proxy.clearance.x_userid", max: clearanceValueMaxLength},
+		{key: "proxy.clearance.statsig_id", max: clearanceValueMaxLength},
+	}
+	for _, field := range fields {
+		value, ok := getNestedStringIfPresent(data, field.key)
+		if !ok || value == "" {
+			continue
+		}
+		if strings.ContainsAny(value, "\r\n") {
+			return ValidationError{Message: field.key + " must not contain CR or LF"}
+		}
+		if len(value) > field.max {
+			return ValidationError{Message: field.key + " must be <= " + strconv.Itoa(field.max) + " characters"}
+		}
+	}
+	return nil
+}
+
 func decodeStatsigSeed(seed string) ([]byte, error) {
 	if b, err := base64.StdEncoding.DecodeString(seed); err == nil {
 		return b, nil
@@ -173,6 +213,14 @@ func getNestedString(data map[string]any, dotted string) string {
 		return v
 	}
 	return ""
+}
+
+func getNestedStringIfPresent(data map[string]any, dotted string) (string, bool) {
+	v := getNestedLocked(data, dotted)
+	if v == nil {
+		return "", false
+	}
+	return toStr(v), true
 }
 
 func isHexRune(r rune) bool {

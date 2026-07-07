@@ -200,6 +200,8 @@ statsig_hex  = "<hex-fingerprint>"
 
 `statsig_seed` 和 `statsig_hex` 必须同时配置或同时留空。`statsig_seed` 必须是可解码为 48 字节的 base64 字符串；`statsig_hex` 只允许十六进制字符且最多 512 字符。无效值会在启动或 `/admin/api/config` 更新时被拒绝，错误信息不会回显原始指纹值。
 
+`proxy.clearance` 下用于生成请求头或 Cookie 的字符串会在启动和 `/admin/api/config` 更新时统一校验。`user_agent` 最多 512 字符；`cf_cookies` 最多 8192 字符；`cf_clearance` 最多 4096 字符；`device_id`、`x_anonuserid`、`x_challenge`、`x_signature`、`x_userid` 和 `statsig_id` 最多 1024 字符。以上字段都不能包含 CR/LF 换行，避免 header 注入和请求头异常放大；校验错误只返回字段名和规则，不回显原始 Cookie 或指纹值。
+
 ## 配置说明
 
 配置文件采用 TOML 格式，加载优先级：
@@ -248,8 +250,8 @@ video_max_mb = 0                # 视频缓存上限（MB），0 = 不限制
 proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SOCKS4/5
 
 [proxy.clearance]
-cf_cookies = ""                 # 手动模式：浏览器 Cookie 串（含 cf_clearance）
-user_agent = "..."              # 需与抓取 Cookie 时的 UA 一致
+cf_cookies = ""                 # 手动模式：浏览器 Cookie 串（含 cf_clearance），最多 8192 字符，不能包含换行
+user_agent = "..."              # 需与抓取 Cookie 时的 UA 一致，最多 512 字符，不能包含换行
 statsig_seed = ""               # 可选：真实 statsig 种子；必须可解码为 48 字节，且与 statsig_hex 成对配置
 statsig_hex  = ""               # 可选：真实 statsig HEX 指纹；十六进制，最多 512 字符
 
