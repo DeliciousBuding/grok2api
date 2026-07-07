@@ -180,23 +180,25 @@ user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ..."
 ```
 ✅ DONE
 
-SEED=abc123def456
+SEED=<48-byte-base64-seed>
 
-HEX =0123456789abcdef
+HEX =<hex-fingerprint>
 
 ── config.toml ──
 [proxy.clearance]
-statsig_seed = "abc123def456"
-statsig_hex  = "0123456789abcdef"
+statsig_seed = "<48-byte-base64-seed>"
+statsig_hex  = "<hex-fingerprint>"
 ```
 
 7. 将 `SEED` 和 `HEX` 填入 `data/config.toml`：
 
 ```toml
 [proxy.clearance]
-statsig_seed = "abc123def456"
-statsig_hex  = "0123456789abcdef"
+statsig_seed = "<48-byte-base64-seed>"
+statsig_hex  = "<hex-fingerprint>"
 ```
+
+`statsig_seed` 和 `statsig_hex` 必须同时配置或同时留空。`statsig_seed` 必须是可解码为 48 字节的 base64 字符串；`statsig_hex` 只允许十六进制字符且最多 512 字符。无效值会在启动或 `/admin/api/config` 更新时被拒绝，错误信息不会回显原始指纹值。
 
 ## 配置说明
 
@@ -248,8 +250,8 @@ proxy_url = ""                  # 出站代理（留空直连），HTTP/HTTPS/SO
 [proxy.clearance]
 cf_cookies = ""                 # 手动模式：浏览器 Cookie 串（含 cf_clearance）
 user_agent = "..."              # 需与抓取 Cookie 时的 UA 一致
-statsig_seed = ""               # 可选：真实 statsig 种子（抓取方法见「抓取 statsig 指纹」章节）
-statsig_hex  = ""               # 可选：真实 statsig HEX 指纹
+statsig_seed = ""               # 可选：真实 statsig 种子；必须可解码为 48 字节，且与 statsig_hex 成对配置
+statsig_hex  = ""               # 可选：真实 statsig HEX 指纹；十六进制，最多 512 字符
 
 [retry]
 max_retries = 1                 # 换账号重试最大次数（0 = 不重试，运行时钳制到 0..5）

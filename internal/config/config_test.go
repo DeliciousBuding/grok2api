@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -56,6 +57,93 @@ func TestLoadIfStaleSkipsReloadWithinInterval(t *testing.T) {
 	}
 	if err := s.loadIfStaleAt(now.Add(2*time.Second), time.Second); err == nil {
 		t.Fatal("expected reload after throttle window to parse changed invalid config")
+	}
+}
+
+func TestLoadRejectsInvalidStatsigPairConfig(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "missing hex",
+			body: "[proxy.clearance]\nstatsig_seed = \"abc\"\n",
+			want: "statsig_seed and statsig_hex must be configured together",
+		},
+		{
+			name: "bad seed length",
+			body: "[proxy.clearance]\nstatsig_seed = \"abc\"\nstatsig_hex = \"0123456789abcdef\"\n",
+			want: "statsig_seed must decode to 48 bytes",
+		},
+		{
+			name: "non hex fingerprint",
+			body: "[proxy.clearance]\nstatsig_seed = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\nstatsig_hex = \"not-hex\"\n",
+			want: "statsig_hex must contain only hexadecimal characters",
+		},
+		{
+			name: "oversized hex",
+			body: "[proxy.clearance]\nstatsig_seed = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\nstatsig_hex = \"" + strings.Repeat("a", 513) + "\"\n",
+			want: "statsig_hex must be <= 512 characters",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			defaults := filepath.Join(dir, "defaults.toml")
+			user := filepath.Join(dir, "config.toml")
+			if err := os.WriteFile(defaults, []byte(tc.body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			s := &Snapshot{defaultsPath: defaults, userPath: user, defaultsMtime: -1, userMtime: -1}
+
+			err := s.Load()
+
+			if err == nil {
+				t.Fatal("expected invalid statsig config to fail loading")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q error, got %v", tc.want, err)
+			}
+			if strings.Contains(err.Error(), "not-hex") || strings.Contains(err.Error(), strings.Repeat("a", 32)) {
+				t.Fatalf("statsig config error should not echo raw values: %v", err)
+			}
+		})
+	}
+}
+
+func TestUpdateRejectsInvalidStatsigPairBeforePersisting(t *testing.T) {
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.toml")
+	user := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(defaults, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(user, []byte("[proxy.clearance]\nstatsig_seed = \"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\"\nstatsig_hex = \"0123456789abcdef\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := &Snapshot{defaultsPath: defaults, userPath: user, defaultsMtime: -1, userMtime: -1}
+
+	err := s.Update(map[string]any{
+		"proxy": map[string]any{
+			"clearance": map[string]any{
+				"statsig_hex": "not-hex",
+			},
+		},
+	})
+
+	if err == nil {
+		t.Fatal("expected invalid runtime statsig update to fail")
+	}
+	if !strings.Contains(err.Error(), "statsig_hex must contain only hexadecimal characters") {
+		t.Fatalf("expected statsig_hex validation error, got %v", err)
+	}
+	raw, readErr := os.ReadFile(user)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if strings.Contains(string(raw), "not-hex") {
+		t.Fatalf("invalid statsig update should not be persisted: %s", raw)
 	}
 }
 

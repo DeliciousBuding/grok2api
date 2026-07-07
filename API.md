@@ -500,6 +500,8 @@ Mutating admin endpoints emit an `admin_audit` log event after each request. Eve
 
 Startup-only keys cannot be changed through `POST /admin/api/config`: `account.storage.*`, `account.local.*`, `account.sqlite.*`, `account.postgresql.*`, `account.redis.*`, `server.*_timeout_sec`, and `server.max_header_bytes`. Restart with the desired config to switch account storage or HTTP server lifecycle/resource-boundary settings. Reserved distributed backends such as `pg+redis` fail fast until implemented.
 
+`proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` must be configured together or both left empty. The seed must base64-decode to 48 bytes; the HEX fingerprint must contain only hexadecimal characters and be at most 512 characters. Invalid values return HTTP 400 with `invalid_config` and do not echo the submitted fingerprint values.
+
 ### Token Management
 
 | Method | Path | Description |
@@ -786,7 +788,7 @@ All errors follow this format:
 
 | Error Type | HTTP Status | Common Causes |
 |---|---|---|
-| `invalid_request_error` | 400 | Invalid model, missing required fields, bad JSON, oversized remote assets (`asset_download_too_large`), or oversized image-edit files (`image_file_too_large`) |
+| `invalid_request_error` | 400 | Invalid model, missing required fields, bad JSON, invalid runtime config (`invalid_config`), oversized remote assets (`asset_download_too_large`), or oversized image-edit files (`image_file_too_large`) |
 | `invalid_request_error` | 413 | Request body exceeds `server.max_body_bytes` or the built-in 10MiB default for non-multipart writes; response code is `request_body_too_large` |
 | `authentication_error` | 401 | Missing or invalid API key |
 | `rate_limit_error` | 429 | No available accounts, all quotas exhausted, or admission control exhausted |

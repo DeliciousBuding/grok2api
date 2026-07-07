@@ -1,4 +1,4 @@
-最后更新：2026-07-07 11:28
+最后更新：2026-07-07 11:47
 
 # Operations Runbook
 
@@ -132,6 +132,8 @@ Use lower limits for small account pools. A good starting point is to keep `glob
 `server.max_body_bytes` applies to both requests with `Content-Length` and streamed/chunked bodies. When it is `0`, non-multipart write requests still use a built-in 10MiB default limit; multipart media endpoints keep their existing multipart and per-file limits. Oversized bodies return HTTP 413 with `request_body_too_large`, which should be counted separately from malformed JSON in client dashboards.
 
 `server.read_header_timeout_sec`, `server.read_timeout_sec`, `server.write_timeout_sec`, and `server.idle_timeout_sec` tune the public HTTP server's connection-level deadlines. Keep `server.write_timeout_sec = 0` for long streaming deployments unless an outer proxy enforces stream-safe write deadlines. `server.shutdown_timeout_sec` bounds graceful shutdown after SIGINT/SIGTERM. `server.max_header_bytes` bounds aggregate request-header memory before routing or authentication.
+
+`proxy.clearance.statsig_seed` and `proxy.clearance.statsig_hex` are optional but must be configured as a pair. Invalid fingerprint config is rejected at startup and by `/admin/api/config` before it is persisted: the seed must base64-decode to 48 bytes, and the HEX value must be hexadecimal and at most 512 characters. Validation errors name the field and rule without echoing the submitted secret-like value.
 
 `asset.max_download_bytes` caps remote image/file downloads before they are re-uploaded to the upstream service. Values less than or equal to zero use the built-in 30MiB safety default.
 

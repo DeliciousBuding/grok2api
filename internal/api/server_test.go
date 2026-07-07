@@ -148,6 +148,28 @@ func TestValidatePatchRejectsNestedStartupOnlyKeys(t *testing.T) {
 	}
 }
 
+func TestAdminConfigUpdateRejectsInvalidStatsigPairAsBadRequest(t *testing.T) {
+	loadTestConfig(t, "[app]\napp_key = \"admin\"\n")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+	body := `{"proxy":{"clearance":{"statsig_seed":"abc","statsig_hex":"not-hex"}}}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/config", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer admin")
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "invalid_config") {
+		t.Fatalf("expected invalid_config code, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "not-hex") || strings.Contains(w.Body.String(), "abc") {
+		t.Fatalf("config validation error should not echo raw statsig values: %s", w.Body.String())
+	}
+}
+
 func TestMetricsEndpointDoesNotExposeTokens(t *testing.T) {
 	loadTestConfig(t, "")
 

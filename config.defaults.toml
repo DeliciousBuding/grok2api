@@ -66,6 +66,7 @@ proxy_url = ""
 cf_cookies = ""
 # User-Agent（需与 cf_cookies 匹配）
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+# 可选真实 statsig 指纹：必须成对配置；seed 必须 base64 解码为 48 字节，hex 只允许十六进制且最多 512 字符。
 statsig_seed = ""
 statsig_hex  = ""
 

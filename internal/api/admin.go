@@ -89,6 +89,10 @@ func (s *Server) handleConfigUpdate(c *gin.Context) {
 		return
 	}
 	if err := config.Global().Update(patch); err != nil {
+		if config.IsValidationError(err) {
+			writeAppError(c, platform.ValidationErrorCode(err.Error(), "config", "invalid_config"))
+			return
+		}
 		writeAppError(c, platform.UpstreamError("config update failed: "+err.Error(), 500, ""))
 		return
 	}

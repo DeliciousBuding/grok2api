@@ -9,6 +9,8 @@
 package config
 
 import (
+	"encoding/base64"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -35,6 +37,19 @@ var global = &Snapshot{}
 
 // Global returns the process-global snapshot.
 func Global() *Snapshot { return global }
+
+// ValidationError reports an invalid user-supplied configuration value without
+// carrying the raw value in the error text.
+type ValidationError struct {
+	Message string
+}
+
+func (e ValidationError) Error() string { return e.Message }
+
+func IsValidationError(err error) bool {
+	var target ValidationError
+	return errors.As(err, &target)
+}
 
 // SetPaths configures the defaults and user config file paths.
 func SetPaths(defaultsPath, userPath string) {
@@ -108,11 +123,60 @@ func (s *Snapshot) loadLocked() error {
 	}
 	data = deepMerge(data, user)
 	applyEnv(data, "GROK_")
+	if err := validateLoadedConfig(data); err != nil {
+		return err
+	}
 
 	s.data = data
 	s.defaultsMtime = dMtime
 	s.userMtime = uMtime
 	return nil
+}
+
+func validateLoadedConfig(data map[string]any) error {
+	return validateStatsigConfig(data)
+}
+
+func validateStatsigConfig(data map[string]any) error {
+	seed := strings.TrimSpace(getNestedString(data, "proxy.clearance.statsig_seed"))
+	hx := strings.TrimSpace(getNestedString(data, "proxy.clearance.statsig_hex"))
+	if seed == "" && hx == "" {
+		return nil
+	}
+	if seed == "" || hx == "" {
+		return ValidationError{Message: "proxy.clearance statsig_seed and statsig_hex must be configured together"}
+	}
+	decoded, err := decodeStatsigSeed(seed)
+	if err != nil || len(decoded) != 48 {
+		return ValidationError{Message: "proxy.clearance.statsig_seed must decode to 48 bytes"}
+	}
+	if len(hx) > 512 {
+		return ValidationError{Message: "proxy.clearance.statsig_hex must be <= 512 characters"}
+	}
+	for _, r := range hx {
+		if !isHexRune(r) {
+			return ValidationError{Message: "proxy.clearance.statsig_hex must contain only hexadecimal characters"}
+		}
+	}
+	return nil
+}
+
+func decodeStatsigSeed(seed string) ([]byte, error) {
+	if b, err := base64.StdEncoding.DecodeString(seed); err == nil {
+		return b, nil
+	}
+	return base64.RawStdEncoding.DecodeString(seed)
+}
+
+func getNestedString(data map[string]any, dotted string) string {
+	if v, ok := getNestedLocked(data, dotted).(string); ok {
+		return v
+	}
+	return ""
+}
+
+func isHexRune(r rune) bool {
+	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
 // Raw returns a deep copy of the current nested config data.
@@ -240,6 +304,9 @@ func (s *Snapshot) Update(patch map[string]any) error {
 		return err
 	}
 	merged := deepMerge(existing, patch)
+	if err := validateLoadedConfig(merged); err != nil {
+		return err
+	}
 	f, err := os.Create(s.userPath)
 	if err != nil {
 		return err
