@@ -199,7 +199,11 @@ func anthropicContentToString(content any) string {
 
 // handleAnthropicNonStream emits the Anthropic message envelope.
 func (s *Server) handleAnthropicNonStream(c *gin.Context, req *chatCompletionRequest, spec *model.Spec, emitThink bool) {
-	text := s.captureChatText(c.Request, req, spec, "messages")
+	text, err := s.captureChatText(c.Request, req, spec, "messages")
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	messageID := "msg_" + uuid.NewString()
 	blocks := []any{}
 	if emitThink && text != "" {
@@ -241,7 +245,11 @@ func (s *Server) handleAnthropicStream(c *gin.Context, req *chatCompletionReques
 	nonStreamReq := *req
 	f := false
 	nonStreamReq.Stream = &f
-	text := s.captureChatText(c.Request, &nonStreamReq, spec, "messages")
+	text, err := s.captureChatText(c.Request, &nonStreamReq, spec, "messages")
+	if err != nil {
+		sw.writeAnthropicAppError(err)
+		return
+	}
 
 	// 2. content_block_start
 	sw.writeEventJSON("content_block_start", map[string]any{

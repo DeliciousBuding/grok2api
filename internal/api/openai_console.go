@@ -354,7 +354,11 @@ func (s *Server) handleResponsesStream(c *gin.Context, req *chatCompletionReques
 	nonStreamReq := *req
 	f := false
 	nonStreamReq.Stream = &f
-	text := s.captureChatText(c.Request, &nonStreamReq, spec, "responses")
+	text, err := s.captureChatText(c.Request, &nonStreamReq, spec, "responses")
+	if err != nil {
+		sw.writeOpenAIAppError(err)
+		return
+	}
 
 	itemID := "msg_" + uuid.NewString()
 	outItem := map[string]any{
@@ -433,7 +437,7 @@ func (c *captureWriter) WriteHeader(code int) { c.status = code }
 // captureChatText runs the non-streaming chat path and extracts the text.
 // Uses the internal runChatOnce methods directly (no retry loop — callers
 // that need retry should handle it themselves).
-func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, spec *model.Spec, surface string) string {
+func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, spec *model.Spec, surface string) (string, error) {
 	cw := &captureWriter{}
 	if surface == "" {
 		surface = "responses"
@@ -452,7 +456,7 @@ func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, sp
 	// Select an account and run one attempt.
 	lease, _ := reserveAccount(r.Context(), s.Directory, spec, nil, req.preferTags())
 	if lease == nil {
-		return ""
+		return "", platform.RateLimitError("No available accounts")
 	}
 	if s.Directory != nil {
 		defer s.Directory.Release(lease)
@@ -469,14 +473,14 @@ func (s *Server) captureChatText(r *http.Request, req *chatCompletionRequest, sp
 		emitThink := resolveEmitThink(req.ReasoningEffort)
 		message, fileInputs, perr := extractMessages(req.Messages)
 		if perr != nil {
-			return ""
+			return "", perr
 		}
 		err = s.runGrokChatOnce(cw, r, lease, spec, message, fileInputs, temp, topP, emitThink, false, req.Model)
 	}
 	return s.finishCapturedChatText(surface, req.Model, lease, cw.body, err)
 }
 
-func (s *Server) finishCapturedChatText(surface, modelName string, lease *account.Lease, body []byte, upstreamErr error) string {
+func (s *Server) finishCapturedChatText(surface, modelName string, lease *account.Lease, body []byte, upstreamErr error) (string, error) {
 	if surface == "" {
 		surface = "responses"
 	}
@@ -487,48 +491,49 @@ func (s *Server) finishCapturedChatText(surface, modelName string, lease *accoun
 		if lease != nil {
 			s.feedbackError(lease.Token, upstreamErr, lease.ModeID)
 		}
-		return ""
+		return "", upstreamErr
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(body, &obj); err != nil {
-		s.recordCapturedChatEmptyOutput(surface, modelName, lease)
-		return ""
+		return "", s.recordCapturedChatEmptyOutput(surface, modelName, lease)
 	}
 	choices, _ := obj["choices"].([]any)
 	if len(choices) == 0 {
-		s.recordCapturedChatEmptyOutput(surface, modelName, lease)
-		return ""
+		return "", s.recordCapturedChatEmptyOutput(surface, modelName, lease)
 	}
 	choice, _ := choices[0].(map[string]any)
 	msg, _ := choice["message"].(map[string]any)
 	if msg == nil {
-		s.recordCapturedChatEmptyOutput(surface, modelName, lease)
-		return ""
+		return "", s.recordCapturedChatEmptyOutput(surface, modelName, lease)
 	}
 	text, _ := msg["content"].(string)
 	if strings.TrimSpace(text) == "" {
-		s.recordCapturedChatEmptyOutput(surface, modelName, lease)
-		return ""
+		return "", s.recordCapturedChatEmptyOutput(surface, modelName, lease)
 	}
 	s.metricsRegistry().IncUpstreamStatus(surface, modelName, http.StatusOK)
 	if lease != nil {
 		s.feedback(lease.Token, account.FbSuccess, lease.ModeID, nil, nil)
 	}
-	return text
+	return text, nil
 }
 
-func (s *Server) recordCapturedChatEmptyOutput(surface, modelName string, lease *account.Lease) {
+func (s *Server) recordCapturedChatEmptyOutput(surface, modelName string, lease *account.Lease) error {
 	err := platform.UpstreamError("no chat text returned", http.StatusBadGateway, "")
 	s.metricsRegistry().IncEmptyOutput(surface, modelName)
 	s.metricsRegistry().IncUpstreamStatus(surface, modelName, http.StatusBadGateway)
 	if lease != nil {
 		s.feedbackError(lease.Token, err, lease.ModeID)
 	}
+	return err
 }
 
 // handleResponsesNonStream returns a single response.completed object.
 func (s *Server) handleResponsesNonStream(c *gin.Context, req *chatCompletionRequest, spec *model.Spec) {
-	text := s.captureChatText(c.Request, req, spec, "responses")
+	text, err := s.captureChatText(c.Request, req, spec, "responses")
+	if err != nil {
+		writeAppError(c, err)
+		return
+	}
 	responseID := "resp_" + uuid.NewString()
 	itemID := "msg_" + uuid.NewString()
 	resp := map[string]any{

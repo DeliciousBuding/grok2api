@@ -96,6 +96,15 @@ func (s *sseWriter) writeAnthropicError(message string, kind string, code string
 	s.writeDone()
 }
 
+func (s *sseWriter) writeAnthropicAppError(err error) {
+	var appErr *platform.AppError
+	if errors.As(err, &appErr) {
+		s.writeAnthropicError(appErr.Message, string(appErr.Kind), appErr.Code)
+		return
+	}
+	s.writeAnthropicError(err.Error(), string(platform.ErrServer), "stream_error")
+}
+
 func (s *sseWriter) writeOpenAIAppError(err error) {
 	var appErr *platform.AppError
 	if errors.As(err, &appErr) {

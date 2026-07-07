@@ -1133,6 +1133,94 @@ func TestResponsesRejectInvalidPreferTagsBeforeRouting(t *testing.T) {
 	}
 }
 
+func TestResponsesNonStreamReturnsErrorWhenCaptureFails(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	body := `{"model":"grok-4.3-console","input":"hello","stream":false}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 when chat capture cannot reserve an account, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "rate_limit_exceeded") {
+		t.Fatalf("expected rate_limit_exceeded error, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), `"status":"completed"`) {
+		t.Fatalf("failed capture should not be wrapped as a completed response: %s", w.Body.String())
+	}
+}
+
+func TestAnthropicNonStreamReturnsErrorWhenCaptureFails(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	body := `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"stream":false}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 when chat capture cannot reserve an account, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "rate_limit_exceeded") {
+		t.Fatalf("expected rate_limit_exceeded error, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), `"type":"message"`) {
+		t.Fatalf("failed capture should not be wrapped as an Anthropic message: %s", w.Body.String())
+	}
+}
+
+func TestResponsesStreamEmitsErrorWhenCaptureFails(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	body := `{"model":"grok-4.3-console","input":"hello","stream":true}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("stream should start before capture failure, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "event: error") || !strings.Contains(w.Body.String(), "rate_limit_exceeded") {
+		t.Fatalf("expected stream error event, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "response.completed") {
+		t.Fatalf("failed capture should not emit response.completed: %s", w.Body.String())
+	}
+}
+
+func TestAnthropicStreamEmitsErrorWhenCaptureFails(t *testing.T) {
+	loadTestConfig(t, "")
+	server := NewServer(&snapshotRepo{}, nil, nil, nil, nil)
+
+	body := `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"stream":true}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/messages", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	server.Router().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("stream should start before capture failure, got %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "event: error") || !strings.Contains(w.Body.String(), "rate_limit_exceeded") {
+		t.Fatalf("expected stream error event, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "message_stop") {
+		t.Fatalf("failed capture should not emit message_stop: %s", w.Body.String())
+	}
+}
+
 func TestRunAdminTokenWorkersBoundsActiveWork(t *testing.T) {
 	tokens := []string{"tok-a", "tok-b", "tok-c", "tok-d", "tok-e"}
 	started := make(chan struct{}, len(tokens))
@@ -1920,8 +2008,11 @@ func TestFinishCapturedChatTextRecordsSuccessFeedback(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 	body := mustMarshalChatResponse(t, "grok-4.20-fast", "hello")
 
-	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+	text, err := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
 
+	if err != nil {
+		t.Fatalf("expected captured text without error, got %v", err)
+	}
 	if text != "hello" {
 		t.Fatalf("expected captured text, got %q", text)
 	}
@@ -1946,8 +2037,11 @@ func TestCaptureChatTextRecordsAttemptBeforeAccountSelection(t *testing.T) {
 	}
 	httpReq := httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 
-	text := server.captureChatText(httpReq, req, spec, "responses")
+	text, err := server.captureChatText(httpReq, req, spec, "responses")
 
+	if err == nil {
+		t.Fatal("expected no available accounts error")
+	}
 	if text != "" {
 		t.Fatalf("expected no captured text without account pool, got %q", text)
 	}
@@ -1961,8 +2055,11 @@ func TestFinishCapturedChatTextRecordsEmptyOutputFeedback(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 	body := mustMarshalChatResponse(t, "grok-4.20-fast", "")
 
-	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
+	text, err := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, body, nil)
 
+	if err == nil {
+		t.Fatal("expected empty output error")
+	}
 	if text != "" {
 		t.Fatalf("expected no captured text, got %q", text)
 	}
@@ -1981,8 +2078,11 @@ func TestFinishCapturedChatTextRecordsEmptyOutputFeedback(t *testing.T) {
 func TestFinishCapturedChatTextRecordsUpstreamFailureFeedback(t *testing.T) {
 	server := NewServer(nil, nil, nil, nil, nil)
 
-	text := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, nil, platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
+	text, err := server.finishCapturedChatText("responses", "grok-4.20-fast", &account.Lease{Token: "tok-a", ModeID: 1}, nil, platform.UpstreamError("rate limited", http.StatusTooManyRequests, ""))
 
+	if err == nil {
+		t.Fatal("expected upstream failure error")
+	}
 	if text != "" {
 		t.Fatalf("expected no captured text, got %q", text)
 	}
