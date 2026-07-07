@@ -265,3 +265,63 @@ func TestRepositoryBoundsPersistentReasonFields(t *testing.T) {
 		})
 	}
 }
+
+func TestRepositoryRejectsOversizedExtBeforePersisting(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		repo func(*testing.T) Repository
+	}{
+		{
+			name: "txt",
+			repo: func(t *testing.T) Repository {
+				return NewTxtRepository(filepath.Join(t.TempDir(), "accounts.jsonl"))
+			},
+		},
+		{
+			name: "sqlite",
+			repo: func(t *testing.T) Repository {
+				return NewSQLiteRepository(filepath.Join(t.TempDir(), "accounts.sqlite3"))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := tc.repo(t)
+			if err := repo.Initialize(ctx); err != nil {
+				t.Fatalf("initialize repo: %v", err)
+			}
+			t.Cleanup(func() { _ = repo.Close(ctx) })
+
+			oversizedValue := strings.Repeat("x", MaxExtStringLength+1)
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{
+				{Token: "tok-ok"},
+				{Token: "tok-big-ext", Ext: map[string]any{"blob": oversizedValue}},
+			}); err == nil || !strings.Contains(err.Error(), "ext_too_large") {
+				t.Fatalf("expected ext_too_large from upsert, got %v", err)
+			} else if strings.Contains(err.Error(), strings.Repeat("x", 32)) {
+				t.Fatalf("ext size error should not echo raw ext material: %v", err)
+			}
+			snapshot, err := repo.RuntimeSnapshot(ctx)
+			if err != nil {
+				t.Fatalf("snapshot after failed upsert: %v", err)
+			}
+			if len(snapshot.Items) != 0 {
+				t.Fatalf("failed ext upsert should not persist partial records, got %d", len(snapshot.Items))
+			}
+
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-ext", Ext: map[string]any{"stable": "yes"}}}); err != nil {
+				t.Fatalf("seed ext account: %v", err)
+			}
+			if _, err := repo.PatchAccounts(ctx, []Patch{{Token: "tok-ext", ExtMerge: map[string]any{"blob": oversizedValue}}}); err == nil || !strings.Contains(err.Error(), "ext_too_large") {
+				t.Fatalf("expected ext_too_large from patch, got %v", err)
+			}
+			recs, err := repo.GetAccounts(ctx, []string{"tok-ext"})
+			if err != nil {
+				t.Fatalf("get account after failed ext patch: %v", err)
+			}
+			if len(recs) != 1 || recs[0].Ext["stable"] != "yes" || recs[0].Ext["blob"] != nil {
+				t.Fatalf("failed ext patch should preserve existing ext, got %#v", recs)
+			}
+		})
+	}
+}

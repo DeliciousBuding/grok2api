@@ -617,10 +617,10 @@ func applyPatchToRecord(rec *Record, p Patch, now int64, rev int) error {
 		deleteExtKeys(rec.Ext, "cooldown_until", "cooldown_reason",
 			"disabled_at", "disabled_reason", "expired_at",
 			"expired_reason", "forbidden_strikes")
-	} else if len(p.ExtMerge) > 0 {
-		for k, v := range p.ExtMerge {
-			rec.Ext[k] = v
-		}
+	} else if ext, ok, err := patchExt(rec.Ext, p); err != nil {
+		return err
+	} else if ok {
+		rec.Ext = ext
 	}
 	rec.UpdatedAt = now
 	rec.Revision = rev

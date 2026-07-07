@@ -127,7 +127,7 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if err := r.validatePatchTagsLocked(normalized); err != nil {
+	if err := r.validatePatchesLocked(normalized); err != nil {
 		return nil, err
 	}
 	r.revision++
@@ -217,10 +217,10 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 			deleteExtKeys(rec.Ext, "cooldown_until", "cooldown_reason",
 				"disabled_at", "disabled_reason", "expired_at",
 				"expired_reason", "forbidden_strikes")
-		} else if len(p.ExtMerge) > 0 {
-			for k, v := range p.ExtMerge {
-				rec.Ext[k] = v
-			}
+		} else if ext, ok, err := patchExt(rec.Ext, p); err != nil {
+			return nil, err
+		} else if ok {
+			rec.Ext = ext
 		}
 		rec.UpdatedAt = now
 		rec.Revision = rev
@@ -232,27 +232,41 @@ func (r *TxtRepository) PatchAccounts(ctx context.Context, patches []Patch) (*Mu
 	return &MutationResult{Patched: patched, Revision: rev}, nil
 }
 
-func (r *TxtRepository) validatePatchTagsLocked(patches []Patch) error {
-	scratch := map[string][]string{}
+func (r *TxtRepository) validatePatchesLocked(patches []Patch) error {
+	tagScratch := map[string][]string{}
+	extScratch := map[string]map[string]any{}
 	for _, p := range patches {
 		tok := p.Token
 		if tok == "" {
 			continue
 		}
-		current, ok := scratch[tok]
-		if !ok {
-			rec, exists := r.accounts[tok]
-			if !exists || rec.IsDeleted() {
-				continue
-			}
-			current = rec.Tags
+		rec, exists := r.accounts[tok]
+		if !exists || rec.IsDeleted() {
+			continue
 		}
-		next, changed, err := patchTags(current, p)
+
+		currentTags, ok := tagScratch[tok]
+		if !ok {
+			currentTags = rec.Tags
+		}
+		nextTags, changed, err := patchTags(currentTags, p)
 		if err != nil {
 			return err
 		}
 		if changed {
-			scratch[tok] = next
+			tagScratch[tok] = nextTags
+		}
+
+		currentExt, ok := extScratch[tok]
+		if !ok {
+			currentExt = rec.Ext
+		}
+		nextExt, changed, err := patchExt(currentExt, p)
+		if err != nil {
+			return err
+		}
+		if changed {
+			extScratch[tok] = nextExt
 		}
 	}
 	return nil

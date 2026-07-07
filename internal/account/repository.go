@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -18,15 +19,21 @@ type Upsert struct {
 }
 
 const (
-	MaxTokenLength  = 4096
-	MaxTags         = 10
-	MaxTagLength    = 64
-	MaxReasonLength = 512
+	MaxTokenLength     = 4096
+	MaxTags            = 10
+	MaxTagLength       = 64
+	MaxReasonLength    = 512
+	MaxExtKeys         = 32
+	MaxExtKeyLength    = 64
+	MaxExtStringLength = 1024
+	MaxExtJSONBytes    = 8192
 )
 
 var ErrTokenTooLong = errors.New("token_too_long: account token exceeds maximum length")
 var ErrTagTooLong = errors.New("tag_too_long: account tag exceeds maximum length")
 var ErrTooManyTags = errors.New("too_many_tags: account has too many tags")
+var ErrExtTooLarge = errors.New("ext_too_large: account ext exceeds maximum size")
+var ErrExtKeyTooLong = errors.New("ext_key_too_long: account ext key exceeds maximum length")
 
 func NormalizeAccountToken(raw string) (string, error) {
 	token := platform.SanitizeToken(raw)
@@ -69,6 +76,37 @@ func NormalizeAccountReason(raw string) string {
 	return reason
 }
 
+func NormalizeAccountExt(raw map[string]any) (map[string]any, error) {
+	if raw == nil {
+		return map[string]any{}, nil
+	}
+	if len(raw) > MaxExtKeys {
+		return nil, ErrExtTooLarge
+	}
+	out := make(map[string]any, len(raw))
+	for key, value := range raw {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if len(key) > MaxExtKeyLength {
+			return nil, ErrExtKeyTooLong
+		}
+		if s, ok := value.(string); ok && len(s) > MaxExtStringLength {
+			return nil, ErrExtTooLarge
+		}
+		out[key] = value
+	}
+	payload, err := json.Marshal(out)
+	if err != nil {
+		return nil, ErrExtTooLarge
+	}
+	if len(payload) > MaxExtJSONBytes {
+		return nil, ErrExtTooLarge
+	}
+	return out, nil
+}
+
 func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
 	out := make([]Upsert, 0, len(items))
 	for _, it := range items {
@@ -85,9 +123,9 @@ func normalizeUpserts(items []Upsert, forcedPool string) ([]Upsert, error) {
 		} else if _, ok := PoolFromName(pool); !ok {
 			pool = "basic"
 		}
-		ext := it.Ext
-		if ext == nil {
-			ext = map[string]any{}
+		ext, err := NormalizeAccountExt(it.Ext)
+		if err != nil {
+			return nil, err
 		}
 		tags, err := NormalizeAccountTags(it.Tags)
 		if err != nil {
@@ -141,6 +179,13 @@ func normalizePatches(patches []Patch) ([]Patch, error) {
 			reason := NormalizeAccountReason(*out[i].StateReason)
 			out[i].StateReason = &reason
 		}
+		if out[i].ExtMerge != nil {
+			ext, err := NormalizeAccountExt(out[i].ExtMerge)
+			if err != nil {
+				return nil, err
+			}
+			out[i].ExtMerge = ext
+		}
 	}
 	return out, nil
 }
@@ -161,6 +206,24 @@ func patchTags(current []string, p Patch) ([]string, bool, error) {
 		return nil, false, err
 	}
 	return tags, true, nil
+}
+
+func patchExt(current map[string]any, p Patch) (map[string]any, bool, error) {
+	if len(p.ExtMerge) == 0 {
+		return current, false, nil
+	}
+	next := make(map[string]any, len(current)+len(p.ExtMerge))
+	for key, value := range current {
+		next[key] = value
+	}
+	for key, value := range p.ExtMerge {
+		next[key] = value
+	}
+	ext, err := NormalizeAccountExt(next)
+	if err != nil {
+		return nil, false, err
+	}
+	return ext, true, nil
 }
 
 // Patch mutates an existing account (only set fields are applied).
