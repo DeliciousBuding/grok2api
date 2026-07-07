@@ -22,6 +22,10 @@ func buildChangeSet(records []*Record, since int, currentRevision int, limit int
 		hasMore = end < len(records)
 		records = records[:end]
 	}
+	return buildChangeSetFromWindow(records, since, currentRevision, hasMore)
+}
+
+func buildChangeSetFromWindow(records []*Record, since int, currentRevision int, hasMore bool) *ChangeSet {
 	batchMax := since
 	var deleted []string
 	for _, rec := range records {

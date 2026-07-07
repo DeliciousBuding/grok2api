@@ -85,7 +85,7 @@ func (r *SQLiteRepository) ScanChanges(ctx context.Context, since int, limit int
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	rows, err := r.queryRecordsLocked(ctx, "SELECT data_json, revision FROM accounts WHERE revision > ? ORDER BY revision ASC", since)
+	rows, hasMore, err := r.queryChangeWindowLocked(ctx, since, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (r *SQLiteRepository) ScanChanges(ctx context.Context, since int, limit int
 	if err != nil {
 		return nil, err
 	}
-	return buildChangeSet(rows, since, current, limit), nil
+	return buildChangeSetFromWindow(rows, since, current, hasMore), nil
 }
 
 func (r *SQLiteRepository) UpsertAccounts(ctx context.Context, items []Upsert) (*MutationResult, error) {
@@ -447,6 +447,59 @@ func (r *SQLiteRepository) queryRecordsLocked(ctx context.Context, query string,
 	return scanSQLiteRecords(rows)
 }
 
+func (r *SQLiteRepository) queryChangeWindowLocked(ctx context.Context, since int, limit int) ([]*Record, bool, error) {
+	db, err := r.dbLocked()
+	if err != nil {
+		return nil, false, err
+	}
+	rows, err := db.QueryContext(ctx, `
+SELECT data_json, revision
+FROM accounts
+WHERE revision > ?
+ORDER BY revision ASC, token ASC
+LIMIT ?`, since, limit)
+	if err != nil {
+		return nil, false, err
+	}
+	records, err := scanSQLiteRecords(rows)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(records) == 0 {
+		return records, false, nil
+	}
+	boundary := records[len(records)-1]
+	rows, err = db.QueryContext(ctx, `
+SELECT data_json, revision
+FROM accounts
+WHERE revision = ? AND token > ?
+ORDER BY token ASC`, boundary.Revision, boundary.Token)
+	if err != nil {
+		return nil, false, err
+	}
+	sameRevisionTail, err := scanSQLiteRecords(rows)
+	if err != nil {
+		return nil, false, err
+	}
+	records = append(records, sameRevisionTail...)
+	hasMore, err := sqliteHasRevisionAfter(ctx, db, boundary.Revision)
+	if err != nil {
+		return nil, false, err
+	}
+	return records, hasMore, nil
+}
+
+func sqliteHasRevisionAfter(ctx context.Context, db *sql.DB, revision int) (bool, error) {
+	var exists int
+	if err := db.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE revision > ? LIMIT 1", revision).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 func (r *SQLiteRepository) dbLocked() (*sql.DB, error) {
 	if r.db == nil {
 		return nil, errors.New("sqlite account repository is not initialized")
@@ -736,7 +789,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   revision INTEGER NOT NULL,
   data_json TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_accounts_revision ON accounts(revision);
+CREATE INDEX IF NOT EXISTS idx_accounts_revision ON accounts(revision, token);
 CREATE INDEX IF NOT EXISTS idx_accounts_pool_status ON accounts(pool, status);
 CREATE INDEX IF NOT EXISTS idx_accounts_deleted_at ON accounts(deleted_at);
 CREATE TABLE IF NOT EXISTS account_meta (

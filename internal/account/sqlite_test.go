@@ -2,9 +2,12 @@ package account
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 )
 
 func TestSQLiteRepositoryPersistsAccountMutations(t *testing.T) {
@@ -103,6 +106,57 @@ func TestSQLiteRepositoryAdvancesRevisionOnNoopMutation(t *testing.T) {
 	}
 	if changes.Revision != revision || len(changes.Items) != 0 {
 		t.Fatalf("unexpected no-op changeset: %#v", changes)
+	}
+}
+
+func TestSQLiteRepositoryScanChangesDoesNotDecodeBeyondRequestedWindow(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "accounts.db")
+	repo := NewSQLiteRepository(path)
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("initialize sqlite repo: %v", err)
+	}
+
+	if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-a"}}); err != nil {
+		t.Fatalf("upsert first account: %v", err)
+	}
+	if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-b"}}); err != nil {
+		t.Fatalf("upsert second account: %v", err)
+	}
+	if err := repo.Close(ctx); err != nil {
+		t.Fatalf("close repo before corruption insert: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", sqliteAccountDSN(path))
+	if err != nil {
+		t.Fatalf("open sqlite directly: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO accounts (token, pool, status, updated_at, deleted_at, revision, data_json)
+VALUES ('tok-corrupt', 'basic', 'active', 0, NULL, 99, '{');
+UPDATE account_meta SET value = 99 WHERE key = 'revision';
+`); err != nil {
+		t.Fatalf("insert corrupt backlog row: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close direct sqlite: %v", err)
+	}
+
+	reopened := NewSQLiteRepository(path)
+	if err := reopened.Initialize(ctx); err != nil {
+		t.Fatalf("reopen sqlite repo: %v", err)
+	}
+	t.Cleanup(func() { _ = reopened.Close(ctx) })
+
+	changes, err := reopened.ScanChanges(ctx, 0, 1)
+	if err != nil {
+		t.Fatalf("scan changes should not decode rows beyond requested page: %v", err)
+	}
+	if len(changes.Items) != 1 || changes.Items[0].Token != "tok-a" {
+		t.Fatalf("expected first valid change only, got %#v", changes.Items)
+	}
+	if !changes.HasMore || changes.Revision != changes.Items[0].Revision {
+		t.Fatalf("expected more changes after first page, got %#v", changes)
 	}
 }
 
