@@ -21,6 +21,7 @@ import (
 
 const (
 	defaultUpstreamMaxResponseBytes = 16 << 20
+	maxUpstreamResponseBytes        = 64 << 20
 	defaultUpstreamMaxErrorBytes    = 4096
 )
 
@@ -290,10 +291,7 @@ func readUpstreamErrorBody(resp *http.Response) []byte {
 }
 
 func readUpstreamResponseBody(resp *http.Response) ([]byte, error) {
-	limit := config.Global().GetInt("upstream.max_response_bytes", defaultUpstreamMaxResponseBytes)
-	if limit <= 0 {
-		limit = defaultUpstreamMaxResponseBytes
-	}
+	limit := configuredUpstreamMaxResponseBytes()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
 	if err != nil {
 		return nil, platform.UpstreamError("read response body failed: "+err.Error(), resp.StatusCode, "")
@@ -302,6 +300,17 @@ func readUpstreamResponseBody(resp *http.Response) ([]byte, error) {
 		return nil, platform.UpstreamError(fmt.Sprintf("upstream response exceeds %d bytes", limit), resp.StatusCode, "")
 	}
 	return body, nil
+}
+
+func configuredUpstreamMaxResponseBytes() int {
+	limit := config.Global().GetInt("upstream.max_response_bytes", defaultUpstreamMaxResponseBytes)
+	if limit <= 0 {
+		return defaultUpstreamMaxResponseBytes
+	}
+	if limit > maxUpstreamResponseBytes {
+		return maxUpstreamResponseBytes
+	}
+	return limit
 }
 
 // do builds standard *http.Request with headers, then sends via tlsclient.

@@ -298,7 +298,7 @@ curl -X POST http://localhost:8000/v1/images/edits \
 |---|---|---|
 | `model` | string | **required** — must be `grok-imagine-image-edit` |
 | `prompt` | string | **required** — editing instruction |
-| `image[]` | file | **required** — one or more source images; each file is capped by `asset.max_inline_image_bytes` |
+| `image[]` | file | **required** — one or more source images; each file is capped by `asset.max_inline_image_bytes` with a 256MiB effective ceiling |
 | `response_format` | string | `"url"` (default) or `"b64_json"` |
 
 ---

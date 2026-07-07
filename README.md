@@ -296,14 +296,14 @@ admin_sec = 60                  # 管理操作超时（秒，正数有效上限 
 upload_timeout = 60             # 资源上传超时（秒）
 list_timeout = 60               # 资源列表超时（秒）
 delete_timeout = 60             # 资源删除超时（秒）
-max_download_bytes = 31457280   # 远程资源下载上限（字节，<=0 使用安全默认值）
-max_inline_image_bytes = 31457280  # 图像编辑源图上限（字节，<=0 使用安全默认值）
-max_fetch_image_bytes = 52428800   # b64_json 图片抓取上限（字节，<=0 使用安全默认值）
+max_download_bytes = 31457280   # 远程资源下载上限（字节，<=0 使用安全默认值，正数有效上限 268435456）
+max_inline_image_bytes = 31457280  # 图像编辑源图上限（字节，<=0 使用安全默认值，正数有效上限 268435456）
+max_fetch_image_bytes = 52428800   # b64_json 图片抓取上限（字节，<=0 使用安全默认值，正数有效上限 268435456）
 fetch_image_timeout_sec = 30       # b64_json 图片抓取超时（秒，<=0 使用安全默认值）
 max_fetch_image_concurrency = 0    # b64_json 图片抓取并发上限，0 = 不限制，正数有效上限 256
 
 [upstream]
-max_response_bytes = 16777216   # 非流式上游响应上限（字节，<=0 使用安全默认值）
+max_response_bytes = 16777216   # 非流式上游响应上限（字节，<=0 使用安全默认值，正数有效上限 67108864）
 
 [nsfw]
 timeout = 60                    # NSFW 设置超时（秒）

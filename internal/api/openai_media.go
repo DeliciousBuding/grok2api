@@ -88,6 +88,8 @@ func (s *Server) handleFileVideo(c *gin.Context) {
 const (
 	defaultImageEditMaxFileBytes         = 30 << 20
 	defaultFetchImageMaxBytes            = 50 << 20
+	maxImageEditFileBytes                = 256 << 20
+	maxFetchImageBytes                   = 256 << 20
 	defaultFetchImageTimeout             = 30 * time.Second
 	defaultFetchImageMaxIdleConnsPerHost = 100
 	noGeneratedImagesMessage             = "no generated images returned"
@@ -405,10 +407,7 @@ func wsImageRequestContextError(err error) error {
 }
 
 func readImageEditFileBytes(r io.Reader) ([]byte, error) {
-	limit := config.Global().GetInt("asset.max_inline_image_bytes", defaultImageEditMaxFileBytes)
-	if limit <= 0 {
-		limit = defaultImageEditMaxFileBytes
-	}
+	limit := configuredImageEditMaxBytes()
 	raw, err := io.ReadAll(io.LimitReader(r, int64(limit)+1))
 	if err != nil {
 		return nil, platform.ValidationError("Invalid image file: "+err.Error(), "image[]")
@@ -421,6 +420,17 @@ func readImageEditFileBytes(r io.Reader) ([]byte, error) {
 		)
 	}
 	return raw, nil
+}
+
+func configuredImageEditMaxBytes() int {
+	limit := config.Global().GetInt("asset.max_inline_image_bytes", defaultImageEditMaxFileBytes)
+	if limit <= 0 {
+		return defaultImageEditMaxFileBytes
+	}
+	if limit > maxImageEditFileBytes {
+		return maxImageEditFileBytes
+	}
+	return limit
 }
 
 // captureImageURLs runs the non-streaming chat path and extracts any image URLs.
@@ -793,10 +803,7 @@ func fetchImageTimeout() time.Duration {
 }
 
 func readFetchedImageBytes(r io.Reader) ([]byte, error) {
-	limit := config.Global().GetInt("asset.max_fetch_image_bytes", defaultFetchImageMaxBytes)
-	if limit <= 0 {
-		limit = defaultFetchImageMaxBytes
-	}
+	limit := configuredFetchImageMaxBytes()
 	body, err := io.ReadAll(io.LimitReader(r, int64(limit)+1))
 	if err != nil {
 		return nil, err
@@ -805,6 +812,17 @@ func readFetchedImageBytes(r io.Reader) ([]byte, error) {
 		return nil, imageFetchTooLargeError{limit: limit}
 	}
 	return body, nil
+}
+
+func configuredFetchImageMaxBytes() int {
+	limit := config.Global().GetInt("asset.max_fetch_image_bytes", defaultFetchImageMaxBytes)
+	if limit <= 0 {
+		return defaultFetchImageMaxBytes
+	}
+	if limit > maxFetchImageBytes {
+		return maxFetchImageBytes
+	}
+	return limit
 }
 
 type imageFetchBlockedError struct {

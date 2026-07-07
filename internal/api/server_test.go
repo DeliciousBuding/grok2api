@@ -1374,6 +1374,14 @@ func TestReadImageEditFileBytesUsesDefaultLimitWhenUnconfigured(t *testing.T) {
 	}
 }
 
+func TestConfiguredImageEditMaxBytesClampsMisconfiguredLargeValue(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_inline_image_bytes = 1073741824\n")
+
+	if got := configuredImageEditMaxBytes(); got != maxImageEditFileBytes {
+		t.Fatalf("expected image edit byte limit to clamp to %d, got %d", maxImageEditFileBytes, got)
+	}
+}
+
 func TestFetchImageBase64RejectsNonSuccessStatus(t *testing.T) {
 	loadTestConfig(t, "")
 	withFetchImageTransport(t, func(req *http.Request) (*http.Response, error) {
@@ -1437,6 +1445,14 @@ func TestFetchImageBase64RejectsOversizedBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "image fetch exceeds") {
 		t.Fatalf("expected size-limit error, got %v", err)
+	}
+}
+
+func TestConfiguredFetchImageMaxBytesClampsMisconfiguredLargeValue(t *testing.T) {
+	loadTestConfig(t, "[asset]\nmax_fetch_image_bytes = 1073741824\n")
+
+	if got := configuredFetchImageMaxBytes(); got != maxFetchImageBytes {
+		t.Fatalf("expected fetch image byte limit to clamp to %d, got %d", maxFetchImageBytes, got)
 	}
 }
 

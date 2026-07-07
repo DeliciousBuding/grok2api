@@ -15,7 +15,10 @@ import (
 	"github.com/DeliciousBuding/grok2api/internal/platform"
 )
 
-const defaultAssetMaxDownloadBytes = 30 << 20
+const (
+	defaultAssetMaxDownloadBytes = 30 << 20
+	maxAssetDownloadBytes        = 256 << 20
+)
 
 // AssetUploadResult is the response from POST /rest/app-chat/upload-file.
 type AssetUploadResult struct {
@@ -187,10 +190,7 @@ func UploadFromInput(ctx context.Context, t *Transport, token, fileInput string)
 }
 
 func readAssetUploadBytes(reader io.Reader) ([]byte, error) {
-	limit := config.Global().GetInt("asset.max_download_bytes", defaultAssetMaxDownloadBytes)
-	if limit <= 0 {
-		limit = defaultAssetMaxDownloadBytes
-	}
+	limit := configuredAssetDownloadMaxBytes()
 	raw, err := io.ReadAll(io.LimitReader(reader, int64(limit)+1))
 	if err != nil {
 		return nil, platform.UpstreamError("asset fetch read failed: "+err.Error(), 502, "")
@@ -203,6 +203,17 @@ func readAssetUploadBytes(reader io.Reader) ([]byte, error) {
 		)
 	}
 	return raw, nil
+}
+
+func configuredAssetDownloadMaxBytes() int {
+	limit := config.Global().GetInt("asset.max_download_bytes", defaultAssetMaxDownloadBytes)
+	if limit <= 0 {
+		return defaultAssetMaxDownloadBytes
+	}
+	if limit > maxAssetDownloadBytes {
+		return maxAssetDownloadBytes
+	}
+	return limit
 }
 
 // ListAssets returns the asset list for *token*.

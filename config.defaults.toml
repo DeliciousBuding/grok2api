@@ -131,11 +131,11 @@ admin_sec = 60
 upload_timeout = 60
 list_timeout = 60
 delete_timeout = 60
-# 远程资源下载最大字节数，<=0 使用安全默认值 30MiB
+# 远程资源下载最大字节数，<=0 使用安全默认值 30MiB，正数有效上限 256MiB
 max_download_bytes = 31457280
-# 图像编辑 multipart 源图最大字节数，<=0 使用安全默认值 30MiB
+# 图像编辑 multipart 源图最大字节数，<=0 使用安全默认值 30MiB，正数有效上限 256MiB
 max_inline_image_bytes = 31457280
-# response_format=b64_json 时抓取图片最大字节数，<=0 使用安全默认值 50MiB
+# response_format=b64_json 时抓取图片最大字节数，<=0 使用安全默认值 50MiB，正数有效上限 256MiB
 max_fetch_image_bytes = 52428800
 # response_format=b64_json 远程图片抓取超时（秒），<=0 使用安全默认值 30 秒
 fetch_image_timeout_sec = 30
@@ -143,7 +143,7 @@ fetch_image_timeout_sec = 30
 max_fetch_image_concurrency = 0
 
 [upstream]
-# 非流式上游响应最大字节数，<=0 使用安全默认值 16MiB
+# 非流式上游响应最大字节数，<=0 使用安全默认值 16MiB，正数有效上限 64MiB
 max_response_bytes = 16777216
 
 [nsfw]

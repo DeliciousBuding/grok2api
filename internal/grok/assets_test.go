@@ -31,6 +31,14 @@ func TestReadAssetUploadBytesUsesDefaultLimitWhenUnconfigured(t *testing.T) {
 	}
 }
 
+func TestConfiguredAssetDownloadMaxBytesClampsMisconfiguredLargeValue(t *testing.T) {
+	loadGrokTestConfig(t, "[asset]\nmax_download_bytes = 1073741824\n")
+
+	if got := configuredAssetDownloadMaxBytes(); got != maxAssetDownloadBytes {
+		t.Fatalf("expected asset download byte limit to clamp to %d, got %d", maxAssetDownloadBytes, got)
+	}
+}
+
 func loadGrokTestConfig(t *testing.T, body string) {
 	t.Helper()
 	dir := t.TempDir()

@@ -42,6 +42,14 @@ func TestReadUpstreamResponseBodyUsesDefaultLimitWhenUnconfigured(t *testing.T) 
 	}
 }
 
+func TestConfiguredUpstreamMaxResponseBytesClampsMisconfiguredLargeValue(t *testing.T) {
+	loadGrokTestConfig(t, "[upstream]\nmax_response_bytes = 1073741824\n")
+
+	if got := configuredUpstreamMaxResponseBytes(); got != maxUpstreamResponseBytes {
+		t.Fatalf("expected upstream response byte limit to clamp to %d, got %d", maxUpstreamResponseBytes, got)
+	}
+}
+
 func TestReadUpstreamErrorBodyUsesSmallBoundedSample(t *testing.T) {
 	resp := &http.Response{
 		StatusCode: http.StatusBadGateway,
