@@ -133,6 +133,21 @@ func TestAdminStorageEndpointReportsRepositoryBackend(t *testing.T) {
 	}
 }
 
+func TestValidatePatchRejectsNestedStartupOnlyKeys(t *testing.T) {
+	err := validatePatch(map[string]any{
+		"server": map[string]any{
+			"max_header_bytes": 1048576,
+		},
+	})
+	if err == nil {
+		t.Fatal("expected nested startup-only config patch to be rejected")
+	}
+	var appErr *platform.AppError
+	if !errors.As(err, &appErr) || appErr.Code != "startup_only_config" || appErr.Param != "server.max_header_bytes" {
+		t.Fatalf("expected startup_only_config for nested key, got %#v", err)
+	}
+}
+
 func TestMetricsEndpointDoesNotExposeTokens(t *testing.T) {
 	loadTestConfig(t, "")
 

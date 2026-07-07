@@ -113,10 +113,23 @@ func (s *Server) handleConfigUpdate(c *gin.Context) {
 
 // validatePatch rejects startup-only config paths from runtime patches.
 func validatePatch(patch map[string]any) error {
-	for k := range patch {
-		if config.IsStartupOnlyConfigKey(k) {
+	return validatePatchNode("", patch)
+}
+
+func validatePatchNode(prefix string, patch map[string]any) error {
+	for k, v := range patch {
+		path := k
+		if prefix != "" {
+			path = prefix + "." + k
+		}
+		if config.IsStartupOnlyConfigKey(path) {
 			return platform.ValidationErrorCode(
-				"Config key '"+k+"' is reserved for startup", k, "startup_only_config")
+				"Config key '"+path+"' is reserved for startup", path, "startup_only_config")
+		}
+		if child, ok := v.(map[string]any); ok {
+			if err := validatePatchNode(path, child); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
