@@ -474,7 +474,7 @@ func (r *TxtRepository) ResetExpiredConsoleWindows(ctx context.Context) (int, er
 		if w == nil {
 			continue
 		}
-		if w.Remaining <= 0 || w.ResetAt == nil || *w.ResetAt <= now {
+		if w.IsExhausted() || w.IsWindowExpired(now) {
 			rec.Quota["console"] = defMap
 			rec.LastSyncAt = &now
 			rec.UpdatedAt = now

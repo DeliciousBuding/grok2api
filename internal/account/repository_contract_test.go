@@ -7,6 +7,68 @@ import (
 	"testing"
 )
 
+func TestRepositoryConsoleWindowWithoutResetTimeIsNotExpired(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		repo func(*testing.T) Repository
+	}{
+		{
+			name: "txt",
+			repo: func(t *testing.T) Repository {
+				return NewTxtRepository(filepath.Join(t.TempDir(), "accounts.jsonl"))
+			},
+		},
+		{
+			name: "sqlite",
+			repo: func(t *testing.T) Repository {
+				return NewSQLiteRepository(filepath.Join(t.TempDir(), "accounts.sqlite3"))
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := tc.repo(t)
+			if err := repo.Initialize(ctx); err != nil {
+				t.Fatalf("initialize repo: %v", err)
+			}
+			t.Cleanup(func() { _ = repo.Close(ctx) })
+
+			if _, err := repo.UpsertAccounts(ctx, []Upsert{{Token: "tok-no-reset"}}); err != nil {
+				t.Fatalf("seed account: %v", err)
+			}
+			consoleQuota := DefaultQuotaWindow("basic", 5).ToMap()
+			if _, err := repo.PatchAccounts(ctx, []Patch{{Token: "tok-no-reset", QuotaConsole: &consoleQuota}}); err != nil {
+				t.Fatalf("seed console quota without reset_at: %v", err)
+			}
+			before, err := repo.GetAccounts(ctx, []string{"tok-no-reset"})
+			if err != nil {
+				t.Fatalf("get account before reset: %v", err)
+			}
+			if len(before) != 1 {
+				t.Fatalf("expected one account before reset, got %d", len(before))
+			}
+
+			reset, err := repo.ResetExpiredConsoleWindows(ctx)
+			if err != nil {
+				t.Fatalf("reset expired console windows: %v", err)
+			}
+			if reset != 0 {
+				t.Fatalf("console window without reset_at should not be reset, got %d", reset)
+			}
+			after, err := repo.GetAccounts(ctx, []string{"tok-no-reset"})
+			if err != nil {
+				t.Fatalf("get account after reset: %v", err)
+			}
+			if len(after) != 1 {
+				t.Fatalf("expected one account after reset, got %d", len(after))
+			}
+			if after[0].Revision != before[0].Revision || after[0].UpdatedAt != before[0].UpdatedAt || after[0].LastSyncAt != before[0].LastSyncAt {
+				t.Fatalf("no-op console reset should not rewrite account: before=%#v after=%#v", before[0], after[0])
+			}
+		})
+	}
+}
+
 func TestRepositoryScanChangesDoesNotSplitSingleRevisionBatch(t *testing.T) {
 	for _, tc := range []struct {
 		name string
