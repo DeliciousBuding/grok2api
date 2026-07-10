@@ -1,6 +1,6 @@
 module github.com/DeliciousBuding/grok2api
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/bogdanfinn/fhttp v0.6.8
