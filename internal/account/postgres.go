@@ -322,7 +322,7 @@ func (r *PostgresRepository) ResetExpiredConsoleWindows(ctx context.Context) (in
 		if w == nil {
 			return false
 		}
-		return w.Remaining <= 0 || w.ResetAt == nil || *w.ResetAt <= now
+		return w.IsExhausted() || w.IsWindowExpired(now)
 	}, func(rec *Record, now int64) {
 		rec.Quota["console"] = DefaultQuotaWindow("basic", 5).ToMap()
 		rec.LastSyncAt = &now
